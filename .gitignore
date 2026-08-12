@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+dist-ssr/
+
+# Environment (keep templates)
+.env
+.env.*
+!.env.example
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test / cache
+coverage/
+.cache/
+*.tsbuildinfo
+
+# Deploy previews (do not ignore render.yaml — tracked for Render Blueprint)
+.vercel/
+.netlify/
+.render/
+
+# Supabase CLI local cache
+supabase/.temp/
