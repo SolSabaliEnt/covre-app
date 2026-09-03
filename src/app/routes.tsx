@@ -46,6 +46,8 @@ import ProviderWorkerProfile from './pages/provider/WorkerProfile';
 import ProviderReferrals from './pages/provider/Referrals';
 import ProviderTeam from './pages/provider/Team';
 import AdminDashboard from './pages/admin/Dashboard';
+import AdminOperations from './pages/admin/Operations';
+import AdminFullApp from './pages/admin/FullApp';
 import AdminCredentials from './pages/admin/Credentials';
 import AdminMarketplace from './pages/admin/Marketplace';
 import AdminIncidents from './pages/admin/Incidents';
@@ -114,6 +116,8 @@ const adminProtectedRoute = {
       Component: AdminAppShell,
       children: [
         { index: true, Component: AdminDashboard },
+        { path: 'ops', Component: AdminOperations },
+        { path: 'full-app', Component: AdminFullApp },
         { path: 'credentials', Component: AdminCredentials },
         { path: 'marketplace', Component: AdminMarketplace },
         { path: 'incidents', Component: AdminIncidents },
