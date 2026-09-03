@@ -16,14 +16,21 @@ export type WorkerContinuitySummary = {
   sites: Record<string, WorkerSiteContinuity>;
 };
 
-function isCompletedBooking(statusDisplay: string): boolean {
-  return statusDisplay.trim().toLowerCase() === 'completed';
+function shouldCountInContinuity(statusDisplay: string): boolean {
+  const status = statusDisplay.trim().toLowerCase();
+  return !(
+    status.includes('cancelled') ||
+    status === 'no show' ||
+    status === 'disputed'
+  );
 }
 
 /**
- * Continuity is derived from completed booking history, not badges or synthetic achievements.
- * `completed` is ordered newest-first by the Supabase booking adapter, so the first occurrence
- * at a site is the most recent and the last occurrence is the earliest visible history.
+ * Continuity is derived from the worker's past booking history, not badges or synthetic
+ * achievements. `completed` is ordered newest-first by the booking adapter. Past confirmed
+ * bookings are included because the adapter may place an ended booking in this bucket before
+ * its booking status is explicitly changed to `completed`; cancellations, no-shows, and disputes
+ * are excluded.
  */
 export function buildWorkerContinuity(
   bookings?: WorkerBookingsPayload | null,
@@ -32,7 +39,7 @@ export function buildWorkerContinuity(
   let totalCompletedShifts = 0;
 
   for (const card of bookings?.completed ?? []) {
-    if (!isCompletedBooking(card.statusDisplay)) continue;
+    if (!shouldCountInContinuity(card.statusDisplay)) continue;
 
     const { shift } = card;
     totalCompletedShifts += 1;
