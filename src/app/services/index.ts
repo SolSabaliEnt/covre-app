@@ -14,4 +14,5 @@ export * from './types';
 export * from './workerService';
 export * from './providerService';
 export * from './adminService';
+export * from './adminContinuityService';
 export * from './referralService';
