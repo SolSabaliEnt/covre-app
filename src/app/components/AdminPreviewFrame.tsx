@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Eye, LockKeyhole } from 'lucide-react';
+import { Eye, LockKeyhole, Smartphone } from 'lucide-react';
 import { isSupabaseBackendEnabled } from '../lib/backendMode';
 
 export function AdminPreviewFrame({
@@ -44,20 +44,47 @@ export function AdminPreviewFrame({
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl p-4">
+      <div className="mx-auto max-w-7xl p-4 lg:p-6">
         {supabaseMode ? (
-          <div className="mb-4 rounded-xl border border-[#DDE7E8] bg-white px-4 py-3 text-sm leading-6 text-[#607583]">
+          <div className="mx-auto mb-4 max-w-2xl rounded-xl border border-[#DDE7E8] bg-white px-4 py-3 text-sm leading-6 text-[#607583]">
             This preview never changes your authenticated role and does not bypass Supabase ownership or RLS.
             Cross-user live data will appear only after dedicated admin read models are deployed.
           </div>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-[#DDE7E8] bg-white shadow-sm">
-          <div className="pointer-events-none select-none" aria-label={`${audience} app read-only preview`}>
-            {children}
+        <div className="mx-auto w-full max-w-[430px]">
+          <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium text-[#607583]">
+            <span className="inline-flex items-center gap-1.5">
+              <Smartphone className="h-3.5 w-3.5" aria-hidden />
+              Mobile app viewport
+            </span>
+            <span>430 px</span>
+          </div>
+
+          <div className="overflow-hidden rounded-[34px] border-[8px] border-[#13334F] bg-[#13334F] shadow-xl">
+            <div className="flex h-7 items-center justify-center bg-[#13334F]" aria-hidden>
+              <div className="h-1.5 w-20 rounded-full bg-white/30" />
+            </div>
+
+            <div
+              className="h-[760px] overflow-x-hidden overflow-y-auto overscroll-contain bg-[#F7FAFA]"
+              aria-label={`${audience} app mobile viewport`}
+            >
+              <div
+                className="pointer-events-none min-h-full select-none"
+                aria-label={`${audience} app read-only preview`}
+              >
+                {children}
+              </div>
+            </div>
+
+            <div className="flex h-7 items-center justify-center bg-[#13334F]" aria-hidden>
+              <div className="h-1 w-24 rounded-full bg-white/50" />
+            </div>
           </div>
         </div>
-        <p className="mt-3 text-center text-xs text-[#607583]">
+
+        <p className="mx-auto mt-4 max-w-xl text-center text-xs leading-5 text-[#607583]">
           Interactions are disabled in Super Admin Preview so inspecting the app cannot create or mutate worker/provider data.
         </p>
       </div>
