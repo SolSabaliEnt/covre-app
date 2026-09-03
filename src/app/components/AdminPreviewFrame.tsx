@@ -13,7 +13,7 @@ export function AdminPreviewFrame({
   const supabaseMode = isSupabaseBackendEnabled();
 
   return (
-    <div className="min-h-full bg-[#EEF4F5]">
+    <div className="min-h-full bg-[#F3F7F7]">
       <div className="sticky top-0 z-50 border-b border-[#BFDCD5] bg-[#E6F6F2] px-4 py-3 shadow-sm">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -44,28 +44,24 @@ export function AdminPreviewFrame({
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl p-4 lg:p-6">
+      <div className="mx-auto max-w-7xl p-5 lg:p-8">
         {supabaseMode ? (
-          <div className="mx-auto mb-4 max-w-2xl rounded-xl border border-[#DDE7E8] bg-white px-4 py-3 text-sm leading-6 text-[#607583]">
+          <div className="mx-auto mb-5 max-w-2xl rounded-xl border border-[#DDE7E8] bg-white px-4 py-3 text-sm leading-6 text-[#607583] shadow-sm">
             This preview never changes your authenticated role and does not bypass Supabase ownership or RLS.
             Cross-user live data will appear only after dedicated admin read models are deployed.
           </div>
         ) : null}
 
-        <div className="mx-auto w-full max-w-[430px]">
-          <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium text-[#607583]">
+        <div className="mx-auto w-full max-w-[390px]">
+          <div className="mb-3 flex items-center justify-between px-1 text-xs font-medium text-[#607583]">
             <span className="inline-flex items-center gap-1.5">
               <Smartphone className="h-3.5 w-3.5" aria-hidden />
-              Mobile app viewport
+              Mobile preview
             </span>
-            <span>430 px</span>
+            <span>390 × 844</span>
           </div>
 
-          <div className="overflow-hidden rounded-[34px] border-[8px] border-[#13334F] bg-[#13334F] shadow-xl">
-            <div className="flex h-7 items-center justify-center bg-[#13334F]" aria-hidden>
-              <div className="h-1.5 w-20 rounded-full bg-white/30" />
-            </div>
-
+          <div className="overflow-hidden rounded-[28px] border border-[#CBD9DC] bg-white shadow-[0_18px_50px_rgba(19,51,79,0.16)] ring-1 ring-white">
             <div
               className="h-[760px] overflow-x-hidden overflow-y-auto overscroll-contain bg-[#F7FAFA]"
               aria-label={`${audience} app mobile viewport`}
@@ -76,10 +72,6 @@ export function AdminPreviewFrame({
               >
                 {children}
               </div>
-            </div>
-
-            <div className="flex h-7 items-center justify-center bg-[#13334F]" aria-hidden>
-              <div className="h-1 w-24 rounded-full bg-white/50" />
             </div>
           </div>
         </div>
