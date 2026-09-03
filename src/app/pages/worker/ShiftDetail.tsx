@@ -20,6 +20,7 @@ import {
   claimShift,
   getWorkerBookingForShift,
   getWorkerShiftPage,
+  listWorkerBookings,
   listWorkerShiftRequests,
 } from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
@@ -27,6 +28,7 @@ import { useWorkerAction } from '../../hooks/useWorkerAction';
 import { isSupabaseBackendEnabled } from '../../lib/backendMode';
 import { displayWorkerPay, workerPayRateLabel } from '../../lib/workerRateCents';
 import { WORKER_ENTRY_PATH } from '../../lib/entryRoutes';
+import { buildWorkerContinuity, getSiteContinuity } from '../../lib/workerContinuity';
 
 function LoadingBlock() {
   return (
@@ -103,6 +105,10 @@ function ShiftDetailView({
         : Promise.resolve({ ok: true as const, data: null }),
     [supabaseMode, shiftId],
   );
+  const { data: bookings } = useAsyncResource(() => listWorkerBookings(), []);
+
+  const continuity = useMemo(() => buildWorkerContinuity(bookings), [bookings]);
+  const siteHistory = getSiteContinuity(continuity, shift.siteId);
 
   const alreadyApplied = useMemo(
     () =>
@@ -158,15 +164,9 @@ function ShiftDetailView({
               {shift.workerFeedCardStatus === 'preferred' ? 'Preferred' : 'Ready Match'}
             </StatusBadge>
           )}
-          {shift.workerFeedCardStatus === 'preferred' && !supabaseMode && (
-            <StatusBadge variant="preferred">Previously Worked</StatusBadge>
-          )}
-          {supabaseMode && isBooked && (
-            <StatusBadge variant="covered">Booked</StatusBadge>
-          )}
-          {supabaseMode && !isBooked && isApplied && (
-            <StatusBadge variant="pending">Applied</StatusBadge>
-          )}
+          {siteHistory && <StatusBadge variant="preferred">Worked here {siteHistory.completedShifts}×</StatusBadge>}
+          {supabaseMode && isBooked && <StatusBadge variant="covered">Booked</StatusBadge>}
+          {supabaseMode && !isBooked && isApplied && <StatusBadge variant="pending">Applied</StatusBadge>}
         </div>
       </div>
 
@@ -189,6 +189,29 @@ function ShiftDetailView({
         </div>
 
         <div className="space-y-6 p-5 sm:p-6">
+          {siteHistory ? (
+            <div className="rounded-2xl border border-[#DDE7E8] bg-[#F7FAFA] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#607583]">Your history here</p>
+              <div className="mt-3 flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-2xl font-semibold text-[#13334F]">{siteHistory.completedShifts}</p>
+                  <p className="text-xs text-[#607583]">completed {siteHistory.completedShifts === 1 ? 'shift' : 'shifts'}</p>
+                </div>
+                <div className="text-right">
+                  {siteHistory.lastWorkedLabel && (
+                    <p className="text-sm font-medium text-[#13334F]">Last here {siteHistory.lastWorkedLabel}</p>
+                  )}
+                  <p className="mt-1 text-xs text-[#607583]">You already know this place.</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-[#DDE7E8] bg-[#F7FAFA] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#607583]">First time here</p>
+              <p className="mt-2 text-sm text-[#13334F]">Covre keeps the site details you need close before you arrive.</p>
+            </div>
+          )}
+
           {supabaseMode && booking && (
             <div className="rounded-xl border border-[#53B59F] bg-[#E6F6F2] px-4 py-3 text-sm text-[#13334F]">
               <p className="font-medium">You are booked for this shift.</p>
@@ -221,6 +244,7 @@ function ShiftDetailView({
                 ) : null}
             </div>
           )}
+
           <div>
             <h3 className="mb-3 font-semibold text-[#13334F]">Shift Details</h3>
             <div className="space-y-3">
@@ -338,55 +362,48 @@ function ShiftDetailView({
           </div>
         )}
 
-        {supabaseMode &&
-          !isBooked &&
-          shift.workerShiftReadiness &&
-          !shift.workerShiftReadiness.isReady && (
-            <p className="mb-3 text-xs leading-relaxed text-[#9B6419]">
-              You can apply, but missing credentials may affect eligibility.
-            </p>
-          )}
+        {supabaseMode && !isBooked && shift.workerShiftReadiness && !shift.workerShiftReadiness.isReady && (
+          <p className="mb-3 text-xs leading-relaxed text-[#9B6419]">
+            You can apply, but missing credentials may affect eligibility.
+          </p>
+        )}
 
         {!isBooked && (
-        <button
-          type="button"
-          disabled={isApplied || isPending(`claim-${shiftId}`)}
-          onClick={async e => {
-            e.stopPropagation();
-            const r = await run(`claim-${shiftId}`, () => claimShift(shiftId));
-            if (r.ok) {
-              toast.success(r.data.message);
-              if (supabaseMode) {
-                setApplied(true);
-                if (r.data.message === 'Application sent') {
-                  setShowApplicationSent(true);
+          <button
+            type="button"
+            disabled={isApplied || isPending(`claim-${shiftId}`)}
+            onClick={async e => {
+              e.stopPropagation();
+              const r = await run(`claim-${shiftId}`, () => claimShift(shiftId));
+              if (r.ok) {
+                toast.success(r.data.message);
+                if (supabaseMode) {
+                  setApplied(true);
+                  if (r.data.message === 'Application sent') setShowApplicationSent(true);
+                } else {
+                  setClaimed(true);
+                  setShowClaimSuccess(true);
                 }
-              } else {
-                setClaimed(true);
-                setShowClaimSuccess(true);
-              }
-            } else toast.error(r.error.message);
-          }}
-          className="w-full rounded-xl bg-[#53B59F] px-6 py-4 font-medium text-white transition-colors hover:bg-[#2F8E7A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#13334F] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {supabaseMode
-            ? isBooked
-              ? 'Booked'
-              : isApplied
+              } else toast.error(r.error.message);
+            }}
+            className="w-full rounded-xl bg-[#53B59F] px-6 py-4 font-medium text-white transition-colors hover:bg-[#2F8E7A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#13334F] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {supabaseMode
+              ? isApplied
                 ? alreadyApplied && !showApplicationSent
                   ? 'Already applied'
                   : 'Applied'
                 : 'Send application'
-            : claimed
-              ? 'Claimed'
-              : 'Claim Shift'}
-        </button>
+              : claimed
+                ? 'Claimed'
+                : 'Claim Shift'}
+          </button>
         )}
 
         {isBooked && supabaseMode && (
           <Link
             to="/worker/bookings"
-            className="mb-3 flex w-full min-h-11 items-center justify-center rounded-xl bg-[#13334F] px-4 py-3 text-sm font-semibold text-white no-underline transition-colors hover:bg-[#0B243A]"
+            className="mb-3 flex min-h-11 w-full items-center justify-center rounded-xl bg-[#13334F] px-4 py-3 text-sm font-semibold text-white no-underline transition-colors hover:bg-[#0B243A]"
           >
             View in Bookings
           </Link>
@@ -406,7 +423,7 @@ function ShiftDetailView({
                 setQuestionSent(true);
               } else toast.error(r.error.message);
             }}
-            className="flex w-full min-h-11 items-center justify-center gap-2 rounded-xl bg-[#E8EEF2] px-6 py-4 font-medium text-[#13334F] transition-colors hover:bg-[#DDE7E8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#E8EEF2] px-6 py-4 font-medium text-[#13334F] transition-colors hover:bg-[#DDE7E8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <MessageCircle className="h-5 w-5 shrink-0" aria-hidden />
             {questionSent ? 'Question Sent' : 'Ask a Question'}
@@ -422,7 +439,7 @@ function ShiftDetailView({
                 setCalendarAdded(true);
               } else toast.error(r.error.message);
             }}
-            className="flex w-full min-h-11 items-center justify-center gap-2 rounded-xl border border-[#DDE7E8] bg-white px-6 py-4 font-medium text-[#13334F] transition-colors hover:bg-[#F7FAFA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#DDE7E8] bg-white px-6 py-4 font-medium text-[#13334F] transition-colors hover:bg-[#F7FAFA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <CalendarPlus className="h-5 w-5 shrink-0" aria-hidden />
             {calendarAdded ? 'Added' : 'Add to Calendar'}
@@ -444,23 +461,10 @@ export default function ShiftDetail() {
     [id],
   );
 
-  if (loading) {
-    return <LoadingBlock />;
-  }
-  if (error) {
-    return <ErrorBlock message={error.message} onRetry={reload} />;
-  }
-  if (!data || !id) {
-    return <NotFoundCard supabaseMode={supabaseMode} />;
-  }
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorBlock message={error.message} onRetry={reload} />;
+  if (!data || !id) return <NotFoundCard supabaseMode={supabaseMode} />;
 
   const { shift, site } = data;
-  return (
-    <ShiftDetailView
-      shift={shift}
-      site={site}
-      shiftId={id}
-      supabaseMode={supabaseMode}
-    />
-  );
+  return <ShiftDetailView shift={shift} site={site} shiftId={id} supabaseMode={supabaseMode} />;
 }

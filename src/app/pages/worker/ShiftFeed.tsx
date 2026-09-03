@@ -1,16 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ShiftCard } from '../../components/ShiftCard';
 import { WorkerShiftMap } from '../../components/WorkerShiftMap';
 import { Link } from 'react-router';
 import { Bookmark, Shield, Settings } from 'lucide-react';
 import { toast } from 'sonner';
-import { listWorkerShiftRequests, listWorkerShifts, saveShift } from '../../services';
+import {
+  listWorkerBookings,
+  listWorkerShiftRequests,
+  listWorkerShifts,
+  saveShift,
+} from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { useWorkerAction } from '../../hooks/useWorkerAction';
 import { cn } from '../../components/ui/utils';
 import { isSupabaseBackendEnabled } from '../../lib/backendMode';
 import { displayWorkerPay } from '../../lib/workerRateCents';
 import { WORKER_ENTRY_PATH } from '../../lib/entryRoutes';
+import { buildWorkerContinuity, getSiteContinuity } from '../../lib/workerContinuity';
 
 const filters = [
   'Nearby',
@@ -76,6 +82,7 @@ function EmptyShiftState({ supabaseMode }: { supabaseMode?: boolean }) {
 export default function ShiftFeed() {
   const supabaseMode = isSupabaseBackendEnabled();
   const { data: shifts, error, loading, reload } = useAsyncResource(() => listWorkerShifts(), []);
+  const { data: bookings } = useAsyncResource(() => listWorkerBookings(), []);
   const { data: requests } = useAsyncResource(
     () =>
       supabaseMode
@@ -83,6 +90,8 @@ export default function ShiftFeed() {
         : Promise.resolve({ ok: true as const, data: [] }),
     [supabaseMode],
   );
+
+  const continuity = useMemo(() => buildWorkerContinuity(bookings), [bookings]);
   const appliedShiftIds = new Set(
     (requests ?? [])
       .filter(r => r.status === 'requested' || r.status === 'accepted')
@@ -91,15 +100,23 @@ export default function ShiftFeed() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedShiftId, setSelectedShiftId] = useState<string | undefined>();
   const [savedByShift, setSavedByShift] = useState<Record<string, boolean>>({});
+  const [previouslyWorkedOnly, setPreviouslyWorkedOnly] = useState(false);
   const { run, isPending } = useWorkerAction();
 
   useEffect(() => {
     setSelectedShiftId(undefined);
   }, [shifts]);
 
+  const visibleShifts = useMemo(
+    () =>
+      (shifts ?? []).filter(
+        shift => !previouslyWorkedOnly || Boolean(getSiteContinuity(continuity, shift.siteId)),
+      ),
+    [shifts, previouslyWorkedOnly, continuity],
+  );
+
   return (
     <div className="min-h-[100svh] w-full max-w-full overflow-x-hidden bg-[#F7FAFA] px-4 py-6 text-[#10283D]">
-      {/* Header */}
       <div className="border-b border-[#DDE7E8] bg-white p-5 sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-2">
           <h1 className="text-2xl font-semibold text-[#13334F]">
@@ -123,7 +140,38 @@ export default function ShiftFeed() {
           </div>
         </div>
 
-        {/* List | Map */}
+        {continuity.totalCompletedShifts > 0 && (
+          <div className="mb-5 rounded-2xl border border-[#DDE7E8] bg-[#F7FAFA] p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#607583]">Your Covre</p>
+                <p className="mt-1 text-sm text-[#13334F]">
+                  {continuity.mostWorkedSite
+                    ? `${continuity.mostWorkedSite.siteName} is becoming a familiar place.`
+                    : 'Your work history is building here.'}
+                </p>
+              </div>
+              <Link to="/worker/bookings" className="shrink-0 text-xs font-semibold text-[#53B59F] hover:underline">
+                History
+              </Link>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <div>
+                <p className="text-xl font-semibold text-[#13334F]">{continuity.totalCompletedShifts}</p>
+                <p className="text-xs text-[#607583]">completed</p>
+              </div>
+              <div>
+                <p className="text-xl font-semibold text-[#13334F]">{continuity.familiarSiteCount}</p>
+                <p className="text-xs text-[#607583]">places known</p>
+              </div>
+              <div>
+                <p className="text-xl font-semibold text-[#13334F]">{continuity.repeatSiteCount}</p>
+                <p className="text-xs text-[#607583]">places returned to</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-4 flex min-w-0 justify-center px-0 sm:px-1">
           <div
             className="inline-flex w-full max-w-md rounded-full bg-[#E8EEF2] p-1"
@@ -153,17 +201,27 @@ export default function ShiftFeed() {
           </div>
         </div>
 
-        {/* Filter Chips */}
         <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-2 sm:-mx-6 sm:px-6">
-          {filters.map(filter => (
-            <button
-              key={filter}
-              type="button"
-              className="shrink-0 whitespace-nowrap rounded-full bg-[#E8EEF2] px-4 py-2 text-sm font-medium text-[#13334F] transition-colors hover:bg-[#53B59F] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F]"
-            >
-              {filter}
-            </button>
-          ))}
+          {filters.map(filter => {
+            const active = filter === 'Previously Worked' && previouslyWorkedOnly;
+            return (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => {
+                  if (filter === 'Previously Worked') setPreviouslyWorkedOnly(value => !value);
+                }}
+                className={cn(
+                  'shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F]',
+                  active
+                    ? 'bg-[#53B59F] text-white'
+                    : 'bg-[#E8EEF2] text-[#13334F] hover:bg-[#53B59F] hover:text-white',
+                )}
+              >
+                {filter}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -188,7 +246,7 @@ export default function ShiftFeed() {
         </div>
       )}
 
-      {!loading && !error && shifts && shifts.length === 0 && (
+      {!loading && !error && shifts && visibleShifts.length === 0 && (
         <div className="mx-4 mt-4">
           {viewMode === 'map' ? (
             <WorkerShiftMap
@@ -196,6 +254,18 @@ export default function ShiftFeed() {
               selectedShiftId={selectedShiftId}
               onSelectShift={id => setSelectedShiftId(id)}
             />
+          ) : previouslyWorkedOnly ? (
+            <div className="rounded-2xl border border-[#DDE7E8] bg-white p-8 text-center shadow-sm">
+              <p className="text-sm font-medium text-[#13334F]">No open shifts at familiar places right now.</p>
+              <p className="mt-2 text-xs text-[#607583]">Your history stays here when those sites post again.</p>
+              <button
+                type="button"
+                onClick={() => setPreviouslyWorkedOnly(false)}
+                className="mt-4 text-sm font-semibold text-[#53B59F] hover:underline"
+              >
+                Show all shifts
+              </button>
+            </div>
           ) : supabaseMode ? (
             <EmptyShiftState supabaseMode={supabaseMode} />
           ) : (
@@ -206,68 +276,83 @@ export default function ShiftFeed() {
         </div>
       )}
 
-      {!loading && !error && shifts && shifts.length > 0 && (
+      {!loading && !error && shifts && visibleShifts.length > 0 && (
         <div className="py-4">
           {viewMode === 'list' ? (
             <div className="space-y-4">
-              {shifts.map(shift => (
-                <div key={shift.id} className="min-w-0 max-w-full">
-                  <ShiftCard
-                    title={shift.roleTitle}
-                    facility={shift.facilitySettingLabel}
-                    dateTime={`${shift.dateLabel} • ${shift.timeRange}`}
-                    pay={displayWorkerPay(shift)}
-                    paySubtext={`Est. ${shift.estimatedTotalDisplay}`}
-                    distance={shift.distanceMiles}
-                    duration="8 hrs"
-                    badges={shift.credentialTags}
-                    status={
-                      shift.workerShiftReadiness
-                        ? {
-                            variant: shift.workerShiftReadiness.isReady ? 'covered' : 'pending',
-                            label: shift.workerShiftReadiness.isReady
-                              ? 'Ready'
-                              : 'Needs credentials',
-                          }
-                        : shift.workerFeedCardStatus === 'preferred'
-                          ? { variant: 'preferred', label: 'Preferred' }
-                          : { variant: 'covered', label: 'Ready Match' }
-                    }
-                    to={`/worker/shift/${shift.id}`}
-                  />
-                  {shift.workerShiftReadiness && (
-                    <p className="mt-1 px-0.5 text-xs text-[#607583]">
-                      {shift.workerShiftReadiness.statusLabel}
-                    </p>
-                  )}
-                  {supabaseMode && appliedShiftIds.has(shift.id) && (
-                    <p className="mt-1 px-0.5 text-xs font-medium text-[#53B59F]">Applied</p>
-                  )}
-                  <div className="mt-2 flex justify-end px-0.5">
-                    <button
-                      type="button"
-                      disabled={savedByShift[shift.id] || isPending(`save-${shift.id}`)}
-                      onClick={async e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const r = await run(`save-${shift.id}`, () => saveShift(shift.id));
-                        if (r.ok) {
-                          toast.success(r.data.message);
-                          setSavedByShift(prev => ({ ...prev, [shift.id]: true }));
-                        } else toast.error(r.error.message);
-                      }}
-                      className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-[#DDE7E8] bg-white px-3 py-2 text-xs font-semibold text-[#13334F] shadow-sm transition-colors hover:border-[#53B59F]/50 hover:bg-[#F7FAFA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60"
+              {visibleShifts.map(shift => {
+                const siteHistory = getSiteContinuity(continuity, shift.siteId);
+                return (
+                  <div key={shift.id} className="min-w-0 max-w-full">
+                    <ShiftCard
+                      title={shift.roleTitle}
+                      facility={shift.siteName || shift.facilitySettingLabel}
+                      setting={shift.facilitySettingLabel}
+                      dateTime={`${shift.dateLabel} • ${shift.timeRange}`}
+                      pay={displayWorkerPay(shift)}
+                      paySubtext={`Est. ${shift.estimatedTotalDisplay}`}
+                      distance={shift.distanceMiles}
+                      duration="8 hrs"
+                      badges={shift.credentialTags}
+                      status={
+                        shift.workerShiftReadiness
+                          ? {
+                              variant: shift.workerShiftReadiness.isReady ? 'covered' : 'pending',
+                              label: shift.workerShiftReadiness.isReady
+                                ? 'Ready'
+                                : 'Needs credentials',
+                            }
+                          : shift.workerFeedCardStatus === 'preferred'
+                            ? { variant: 'preferred', label: 'Preferred' }
+                            : { variant: 'covered', label: 'Ready Match' }
+                      }
+                      to={`/worker/shift/${shift.id}`}
                     >
-                      <Bookmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      {savedByShift[shift.id] ? 'Saved' : 'Save'}
-                    </button>
+                      {siteHistory && (
+                        <div className="mt-3 border-t border-[#DDE7E8] pt-3 text-xs">
+                          <span className="font-semibold text-[#257665]">
+                            Worked here {siteHistory.completedShifts}×
+                          </span>
+                          {siteHistory.lastWorkedLabel && (
+                            <span className="ml-2 text-[#607583]">Last: {siteHistory.lastWorkedLabel}</span>
+                          )}
+                        </div>
+                      )}
+                    </ShiftCard>
+                    {shift.workerShiftReadiness && (
+                      <p className="mt-1 px-0.5 text-xs text-[#607583]">
+                        {shift.workerShiftReadiness.statusLabel}
+                      </p>
+                    )}
+                    {supabaseMode && appliedShiftIds.has(shift.id) && (
+                      <p className="mt-1 px-0.5 text-xs font-medium text-[#53B59F]">Applied</p>
+                    )}
+                    <div className="mt-2 flex justify-end px-0.5">
+                      <button
+                        type="button"
+                        disabled={savedByShift[shift.id] || isPending(`save-${shift.id}`)}
+                        onClick={async e => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const r = await run(`save-${shift.id}`, () => saveShift(shift.id));
+                          if (r.ok) {
+                            toast.success(r.data.message);
+                            setSavedByShift(prev => ({ ...prev, [shift.id]: true }));
+                          } else toast.error(r.error.message);
+                        }}
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-[#DDE7E8] bg-white px-3 py-2 text-xs font-semibold text-[#13334F] shadow-sm transition-colors hover:border-[#53B59F]/50 hover:bg-[#F7FAFA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <Bookmark className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        {savedByShift[shift.id] ? 'Saved' : 'Save'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <WorkerShiftMap
-              shifts={shifts}
+              shifts={visibleShifts}
               selectedShiftId={selectedShiftId}
               onSelectShift={id => setSelectedShiftId(id)}
             />
