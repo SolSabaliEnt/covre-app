@@ -6,6 +6,7 @@ type RouteAudience = 'Public' | 'Worker' | 'Provider' | 'Admin';
 type RouteEntry = {
   label: string;
   path: string;
+  previewPath?: string;
   note?: string;
   dynamic?: 'shift' | 'worker' | 'site' | 'incident';
 };
@@ -33,46 +34,46 @@ const SECTIONS: RouteSection[] = [
     title: 'Worker app',
     audience: 'Worker',
     routes: [
-      { label: 'Splash', path: '/worker/splash' },
-      { label: 'Welcome', path: '/worker/welcome' },
-      { label: 'Onboarding', path: '/worker/onboarding' },
-      { label: 'Credentials', path: '/worker/credentials' },
-      { label: 'Shift feed + continuity', path: '/worker/shifts' },
-      { label: 'Shift detail + site history', path: '/worker/shift/:shiftId', dynamic: 'shift' },
-      { label: 'Bookings', path: '/worker/bookings' },
-      { label: 'Active shift', path: '/worker/active-shift' },
-      { label: 'Pay', path: '/worker/pay' },
-      { label: 'Messages', path: '/worker/messages' },
-      { label: 'Reputation', path: '/worker/reputation' },
-      { label: 'Safety', path: '/worker/safety' },
-      { label: 'Referrals', path: '/worker/referrals' },
-      { label: 'Account', path: '/worker/account' },
+      { label: 'Splash', path: '/worker/splash', previewPath: '/admin/full-app/worker/splash' },
+      { label: 'Welcome', path: '/worker/welcome', previewPath: '/admin/full-app/worker/welcome' },
+      { label: 'Onboarding', path: '/worker/onboarding', previewPath: '/admin/full-app/worker/onboarding' },
+      { label: 'Credentials', path: '/worker/credentials', previewPath: '/admin/full-app/worker/credentials' },
+      { label: 'Shift feed + continuity', path: '/worker/shifts', previewPath: '/admin/full-app/worker/shifts' },
+      { label: 'Shift detail + site history', path: '/worker/shift/:shiftId', previewPath: '/admin/full-app/worker/shift/:shiftId', dynamic: 'shift' },
+      { label: 'Bookings', path: '/worker/bookings', previewPath: '/admin/full-app/worker/bookings' },
+      { label: 'Active shift', path: '/worker/active-shift', previewPath: '/admin/full-app/worker/active-shift' },
+      { label: 'Pay', path: '/worker/pay', previewPath: '/admin/full-app/worker/pay' },
+      { label: 'Messages', path: '/worker/messages', previewPath: '/admin/full-app/worker/messages' },
+      { label: 'Reputation', path: '/worker/reputation', previewPath: '/admin/full-app/worker/reputation' },
+      { label: 'Safety', path: '/worker/safety', previewPath: '/admin/full-app/worker/safety' },
+      { label: 'Referrals', path: '/worker/referrals', previewPath: '/admin/full-app/worker/referrals' },
+      { label: 'Account', path: '/worker/account', previewPath: '/admin/full-app/worker/account' },
     ],
   },
   {
     title: 'Provider app',
     audience: 'Provider',
     routes: [
-      { label: 'Dashboard', path: '/provider' },
-      { label: 'Onboarding', path: '/provider/onboarding' },
-      { label: 'Post shift', path: '/provider/post-shift' },
-      { label: 'Shifts', path: '/provider/shifts' },
-      { label: 'Shift detail', path: '/provider/shifts/:shiftId', dynamic: 'shift' },
-      { label: 'Worker match', path: '/provider/worker-match/:shiftId', dynamic: 'shift' },
-      { label: 'Workers', path: '/provider/workers' },
-      { label: 'Worker profile', path: '/provider/workers/:workerId', dynamic: 'worker' },
-      { label: 'Bench', path: '/provider/bench' },
-      { label: 'Sites', path: '/provider/sites' },
-      { label: 'New site', path: '/provider/sites/new' },
-      { label: 'Site detail', path: '/provider/sites/:siteId', dynamic: 'site' },
-      { label: 'Timesheets', path: '/provider/timesheets' },
-      { label: 'Billing', path: '/provider/billing' },
-      { label: 'Compliance', path: '/provider/compliance' },
-      { label: 'Team', path: '/provider/team' },
-      { label: 'Referrals', path: '/provider/referrals' },
-      { label: 'Support', path: '/provider/support' },
-      { label: 'Settings', path: '/provider/settings' },
-      { label: 'More', path: '/provider/more' },
+      { label: 'Dashboard', path: '/provider', previewPath: '/admin/full-app/provider' },
+      { label: 'Onboarding', path: '/provider/onboarding', previewPath: '/admin/full-app/provider/onboarding' },
+      { label: 'Post shift', path: '/provider/post-shift', previewPath: '/admin/full-app/provider/post-shift' },
+      { label: 'Shifts', path: '/provider/shifts', previewPath: '/admin/full-app/provider/shifts' },
+      { label: 'Shift detail', path: '/provider/shifts/:shiftId', previewPath: '/admin/full-app/provider/shifts/:shiftId', dynamic: 'shift' },
+      { label: 'Worker match', path: '/provider/worker-match/:shiftId', previewPath: '/admin/full-app/provider/worker-match/:shiftId', dynamic: 'shift' },
+      { label: 'Workers', path: '/provider/workers', previewPath: '/admin/full-app/provider/workers' },
+      { label: 'Worker profile', path: '/provider/workers/:workerId', previewPath: '/admin/full-app/provider/workers/:workerId', dynamic: 'worker' },
+      { label: 'Bench', path: '/provider/bench', previewPath: '/admin/full-app/provider/bench' },
+      { label: 'Sites', path: '/provider/sites', previewPath: '/admin/full-app/provider/sites' },
+      { label: 'New site', path: '/provider/sites/new', previewPath: '/admin/full-app/provider/sites/new' },
+      { label: 'Site detail', path: '/provider/sites/:siteId', previewPath: '/admin/full-app/provider/sites/:siteId', dynamic: 'site' },
+      { label: 'Timesheets', path: '/provider/timesheets', previewPath: '/admin/full-app/provider/timesheets' },
+      { label: 'Billing', path: '/provider/billing', previewPath: '/admin/full-app/provider/billing' },
+      { label: 'Compliance', path: '/provider/compliance', previewPath: '/admin/full-app/provider/compliance' },
+      { label: 'Team', path: '/provider/team', previewPath: '/admin/full-app/provider/team' },
+      { label: 'Referrals', path: '/provider/referrals', previewPath: '/admin/full-app/provider/referrals' },
+      { label: 'Support', path: '/provider/support', previewPath: '/admin/full-app/provider/support' },
+      { label: 'Settings', path: '/provider/settings', previewPath: '/admin/full-app/provider/settings' },
+      { label: 'More', path: '/provider/more', previewPath: '/admin/full-app/provider/more' },
     ],
   },
   {
@@ -112,8 +113,8 @@ function substituteDynamic(
 }
 
 function audienceNote(audience: RouteAudience) {
-  if (audience === 'Worker') return 'Worker session required';
-  if (audience === 'Provider') return 'Provider session required';
+  if (audience === 'Worker') return 'Super Admin read-only preview';
+  if (audience === 'Provider') return 'Super Admin read-only preview';
   if (audience === 'Admin') return 'Admin session required';
   return 'Public';
 }
@@ -135,7 +136,7 @@ export default function AdminFullApp() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2F8E7A]">
-              Admin visibility mode
+              Super Admin visibility mode
             </p>
             <p className="mt-1 text-sm font-semibold text-[#13334F]">Full App</p>
           </div>
@@ -164,12 +165,12 @@ export default function AdminFullApp() {
                 Canonical route inventory
               </p>
               <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#13334F]">
-                See the whole Covre app as admin
+                See the whole Covre product as Super Admin
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[#607583]">
-                This is an inspection index, not impersonation. Worker and provider routes keep their existing
-                role gates and database ownership rules. Use the correct workspace when you need to inspect a
-                role-specific live experience.
+                Worker and provider screens open inside a read-only admin preview. The preview does not change your
+                authenticated role, and in Supabase mode it does not bypass ownership or RLS. Cross-user live data
+                will be added through dedicated admin read models when database access is available.
               </p>
             </div>
             <div className="rounded-xl bg-[#F7FAFA] px-5 py-4 text-center">
@@ -208,12 +209,16 @@ export default function AdminFullApp() {
             </div>
             <div className="divide-y divide-[#EEF4F5]">
               {section.routes.map(route => {
-                const resolvedPath = substituteDynamic(route.path, route.dynamic, ids);
+                const target = route.previewPath ?? route.path;
+                const resolvedPath = substituteDynamic(target, route.dynamic, ids);
                 return (
                   <div key={`${section.title}-${route.path}`} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-[#13334F]">{route.label}</p>
                       <p className="mt-1 break-all font-mono text-xs text-[#607583]">{route.path}</p>
+                      {route.previewPath ? (
+                        <p className="mt-1 break-all text-xs font-medium text-[#2F8E7A]">Preview: {route.previewPath}</p>
+                      ) : null}
                       {route.note ? <p className="mt-1 text-xs text-[#9AAAB3]">{route.note}</p> : null}
                     </div>
                     {resolvedPath ? (
@@ -221,7 +226,7 @@ export default function AdminFullApp() {
                         to={resolvedPath}
                         className="shrink-0 rounded-lg border border-[#DDE7E8] bg-white px-3 py-2 text-sm font-semibold text-[#13334F] no-underline hover:bg-[#F7FAFA]"
                       >
-                        Open route
+                        {route.previewPath ? 'Open preview' : 'Open route'}
                       </Link>
                     ) : (
                       <span className="shrink-0 rounded-lg bg-[#F7FAFA] px-3 py-2 text-xs font-medium text-[#9AAAB3]">
