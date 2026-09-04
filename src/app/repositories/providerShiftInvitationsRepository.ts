@@ -1,13 +1,39 @@
 import type { ApiResult } from '../api/types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 
+export type ProviderShiftInvitationStatus =
+  | 'pending'
+  | 'viewed'
+  | 'accepted'
+  | 'declined'
+  | 'withdrawn';
+
 export type ProviderShiftInvitation = {
   id: string;
   providerId: string;
   shiftId: string;
   workerId: string;
-  status: 'pending' | 'viewed' | 'accepted' | 'declined' | 'withdrawn';
+  status: ProviderShiftInvitationStatus;
   createdAt: string;
+};
+
+export type WorkerShiftInvitation = ProviderShiftInvitation & {
+  shiftTitle: string;
+  role: string;
+  siteName: string;
+  startsAt: string;
+  endsAt: string;
+};
+
+export type WorkerShiftInvitationDecision = 'accepted' | 'declined';
+
+export type WorkerShiftInvitationResponse = {
+  invitationId: string;
+  shiftId: string;
+  workerId: string;
+  status: WorkerShiftInvitationDecision;
+  requestId?: string;
+  bookingReady: boolean;
 };
 
 export type ProviderInvitableShift = {
@@ -29,8 +55,13 @@ function fail<T = never>(code: string, message: string): ApiResult<T> {
 
 function friendlyDbMessage(err: { message?: string; code?: string }, fallback: string): string {
   const raw = err.message ?? fallback;
+  const token = raw.trim().toLowerCase();
+
   if (/provider_shift_invitations|relation .* does not exist/i.test(raw)) {
     return 'Shift invitations require the Covre provider shift invitation migration.';
+  }
+  if (/respond_to_provider_shift_invitation|function .* does not exist/i.test(raw)) {
+    return 'Worker invitation responses require the Covre invitation-response migration.';
   }
   if (err.code === '23505' || /duplicate key|unique constraint/i.test(raw)) {
     return 'This worker has already been invited to that shift.';
@@ -38,6 +69,22 @@ function friendlyDbMessage(err: { message?: string; code?: string }, fallback: s
   if (/row-level security|RLS|permission denied|42501/i.test(raw)) {
     return 'This shift invitation is blocked by database permissions (RLS).';
   }
+
+  const responseMessages: Record<string, string> = {
+    not_authenticated: 'Sign in before responding to a shift invitation.',
+    invalid_decision: 'Choose Accept or Decline.',
+    worker_profile_required: 'Complete your worker profile before responding to invitations.',
+    invitation_not_found: 'This invitation is no longer available.',
+    invitation_already_resolved: 'This invitation has already been resolved.',
+    shift_not_found: 'The invited shift is no longer available.',
+    shift_not_available: 'This shift is no longer open.',
+    bill_rate_required: 'This shift is not ready for booking yet.',
+    worker_rate_required: 'Worker pay must be set before this invitation can be accepted.',
+    booking_conflict: 'This shift has already been covered.',
+    request_not_eligible: 'This invitation cannot be moved into the booking workflow.',
+  };
+  if (responseMessages[token]) return responseMessages[token];
+
   return raw;
 }
 
@@ -150,13 +197,13 @@ export async function createProviderShiftInvitationInSupabase(
     providerId: data.provider_id as string,
     shiftId: data.shift_id as string,
     workerId: data.worker_id as string,
-    status: data.status as ProviderShiftInvitation['status'],
+    status: data.status as ProviderShiftInvitationStatus,
     createdAt: data.created_at as string,
   });
 }
 
 export async function listCurrentWorkerShiftInvitationsFromSupabase(): Promise<
-  ApiResult<ProviderShiftInvitation[]>
+  ApiResult<WorkerShiftInvitation[]>
 > {
   const supabase = getSupabaseClient();
   const {
@@ -175,21 +222,76 @@ export async function listCurrentWorkerShiftInvitationsFromSupabase(): Promise<
 
   const { data, error } = await supabase
     .from('provider_shift_invitations')
-    .select('id, provider_id, shift_id, worker_id, status, created_at')
+    .select(
+      `
+      id,
+      provider_id,
+      shift_id,
+      worker_id,
+      status,
+      created_at,
+      shifts!inner (
+        id,
+        title,
+        role,
+        starts_at,
+        ends_at,
+        care_sites ( name )
+      )
+    `,
+    )
     .eq('worker_id', worker.id)
     .in('status', ['pending', 'viewed'])
+    .gt('shifts.starts_at', new Date().toISOString())
     .order('created_at', { ascending: false });
 
   if (error) return fail('shift_invitations_load', friendlyDbMessage(error, 'Unable to load shift invitations.'));
 
   return ok(
-    (data ?? []).map(row => ({
-      id: row.id as string,
-      providerId: row.provider_id as string,
-      shiftId: row.shift_id as string,
-      workerId: row.worker_id as string,
-      status: row.status as ProviderShiftInvitation['status'],
-      createdAt: row.created_at as string,
-    })),
+    (data ?? []).map(row => {
+      const shift = Array.isArray(row.shifts) ? row.shifts[0] : row.shifts;
+      const siteRaw = (shift as { care_sites?: unknown } | null)?.care_sites;
+      const site = Array.isArray(siteRaw) ? siteRaw[0] : siteRaw;
+      return {
+        id: row.id as string,
+        providerId: row.provider_id as string,
+        shiftId: row.shift_id as string,
+        workerId: row.worker_id as string,
+        status: row.status as ProviderShiftInvitationStatus,
+        createdAt: row.created_at as string,
+        shiftTitle: (((shift as { title?: string | null } | null)?.title ?? (shift as { role?: string | null } | null)?.role) ?? 'Open shift').trim(),
+        role: ((shift as { role?: string | null } | null)?.role ?? 'Care worker').trim(),
+        siteName: ((site as { name?: string } | null)?.name ?? 'Care site').trim(),
+        startsAt: (shift as { starts_at?: string } | null)?.starts_at ?? '',
+        endsAt: (shift as { ends_at?: string } | null)?.ends_at ?? '',
+      };
+    }),
   );
+}
+
+export async function respondToWorkerShiftInvitationInSupabase(
+  invitationId: string,
+  decision: WorkerShiftInvitationDecision,
+): Promise<ApiResult<WorkerShiftInvitationResponse>> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.rpc('respond_to_provider_shift_invitation', {
+    target_invitation_id: invitationId,
+    target_decision: decision,
+  });
+
+  if (error) {
+    return fail('shift_invitation_response', friendlyDbMessage(error, 'Unable to respond to this invitation.'));
+  }
+
+  const raw = Array.isArray(data) ? data[0] : data;
+  if (!raw) return fail('shift_invitation_response', 'Unable to respond to this invitation.');
+
+  return ok({
+    invitationId: raw.invitation_id as string,
+    shiftId: raw.shift_id as string,
+    workerId: raw.worker_id as string,
+    status: raw.invitation_status as WorkerShiftInvitationDecision,
+    requestId: (raw.request_id as string | null) ?? undefined,
+    bookingReady: raw.booking_ready === true,
+  });
 }
