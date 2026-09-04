@@ -4,7 +4,12 @@ import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ArrowLeft, MapPin, Shield, Star, Building2, ClipboardList, StickyNote, Repeat2 } from 'lucide-react';
 import { StatusBadge } from '../../components/StatusBadge';
-import { addWorkerToBench, getProviderWorkerProfile, inviteWorkerToShift, markWorkerDoNotSend } from '../../services';
+import {
+  addWorkerToBench,
+  getCanonicalProviderWorkerProfile,
+  inviteWorkerToShift,
+  markWorkerDoNotSend,
+} from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { useProviderAction } from '../../hooks/useProviderAction';
 
@@ -39,7 +44,7 @@ function SectionTitle({ children }: { children: ReactNode }) {
 
 export default function WorkerProfile() {
   const { workerId = '' } = useParams<{ workerId: string }>();
-  const loader = useCallback(() => getProviderWorkerProfile(workerId), [workerId]);
+  const loader = useCallback(() => getCanonicalProviderWorkerProfile(workerId), [workerId]);
   const { data: profile, error, loading, reload } = useAsyncResource(loader, [workerId]);
   const { run, isPending } = useProviderAction();
   const [benchDone, setBenchDone] = useState(false);
@@ -52,8 +57,7 @@ export default function WorkerProfile() {
     setDnsDone(false);
   }, [workerId]);
 
-  const shiftsTogether =
-    profile?.siteFamiliarity.reduce((total, site) => total + site.shiftCount, 0) ?? 0;
+  const shiftsTogether = profile?.reliability.completedShifts ?? 0;
   const repeatPlaces = profile?.siteFamiliarity.filter(site => site.shiftCount > 1).length ?? 0;
   const strongestSite = profile?.siteFamiliarity[0];
 
@@ -78,7 +82,6 @@ export default function WorkerProfile() {
 
         {loading && <LoadingBlock />}
         {error && <ErrorBlock message={error.message} onRetry={reload} />}
-
         {!loading && !error && profile === null && <NotFoundCard />}
 
         {!loading && !error && profile && (
@@ -93,6 +96,7 @@ export default function WorkerProfile() {
                     <h1 className="break-words text-2xl font-semibold text-[#13334F]">{profile.name}</h1>
                     {profile.isPreferredBench ? <StatusBadge variant="preferred">Preferred bench</StatusBadge> : null}
                     {profile.isVerified ? <StatusBadge variant="verified">Verified</StatusBadge> : null}
+                    {profile.isSupabaseBacked ? <StatusBadge variant="verified">Approved-work history</StatusBadge> : null}
                   </div>
                   <p className="mt-1 text-sm text-[#607583]">{profile.roles.join(' · ')}</p>
                   <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
@@ -100,10 +104,12 @@ export default function WorkerProfile() {
                       <MapPin className="h-4 w-4 shrink-0 text-[#53B59F]" aria-hidden />
                       <span className="min-w-0 break-words">{profile.location}</span>
                     </span>
-                    <span className="flex items-center gap-1.5 font-medium text-[#13334F]">
-                      <Star className="h-4 w-4 shrink-0 text-[#53B59F]" aria-hidden />
-                      Covre Score {profile.covreScore}
-                    </span>
+                    {typeof profile.covreScore === 'number' ? (
+                      <span className="flex items-center gap-1.5 font-medium text-[#13334F]">
+                        <Star className="h-4 w-4 shrink-0 text-[#53B59F]" aria-hidden />
+                        Covre Score {profile.covreScore}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -117,19 +123,23 @@ export default function WorkerProfile() {
                     <div className="flex items-start gap-3">
                       <Repeat2 className="mt-0.5 h-5 w-5 shrink-0 text-[#257665]" aria-hidden />
                       <div>
-                        <p className="font-semibold text-[#13334F]">
-                          You are not starting from zero with this worker.
-                        </p>
+                        <p className="font-semibold text-[#13334F]">You are not starting from zero with this worker.</p>
                         <p className="mt-1 text-sm leading-relaxed text-[#607583]">
-                          {profile.name} has completed {shiftsTogether} {shiftsTogether === 1 ? 'shift' : 'shifts'} across your care sites.
+                          {profile.name} has {shiftsTogether} approved {shiftsTogether === 1 ? 'shift' : 'shifts'} with your organization.
                           {strongestSite ? ` ${strongestSite.siteName} is the place you know each other best.` : ''}
                         </p>
+                        {profile.firstWorkedLabel || profile.lastWorkedLabel ? (
+                          <p className="mt-2 text-xs text-[#607583]">
+                            {profile.firstWorkedLabel ? `First approved work: ${profile.firstWorkedLabel}.` : ''}{' '}
+                            {profile.lastWorkedLabel ? `Most recent: ${profile.lastWorkedLabel}.` : ''}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#BFDCD5] pt-4">
                       <div>
                         <p className="text-xl font-semibold text-[#13334F]">{shiftsTogether}</p>
-                        <p className="text-xs text-[#607583]">shifts together</p>
+                        <p className="text-xs text-[#607583]">approved shifts together</p>
                       </div>
                       <div>
                         <p className="text-xl font-semibold text-[#13334F]">{repeatPlaces}</p>
@@ -145,9 +155,9 @@ export default function WorkerProfile() {
                   <div className="flex items-start gap-3">
                     <Repeat2 className="mt-0.5 h-5 w-5 shrink-0 text-[#257665]" aria-hidden />
                     <div>
-                      <p className="font-semibold text-[#13334F]">New relationship</p>
+                      <p className="font-semibold text-[#13334F]">New approved-work relationship</p>
                       <p className="mt-1 text-sm text-[#607583]">
-                        No completed shifts together yet. Covre will preserve the history as you work together.
+                        No approved shifts together yet. Covre will preserve verified history as work is approved.
                       </p>
                     </div>
                   </div>
@@ -158,53 +168,16 @@ export default function WorkerProfile() {
             <section>
               <SectionTitle>Credentials</SectionTitle>
               <div className="rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
-                <ul className="space-y-2">
-                  {profile.credentials.map(c => (
-                    <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
-                      <Shield className="h-4 w-4 shrink-0 text-[#257665]" aria-hidden />
-                      <span className="font-medium text-[#13334F]">{c.name}</span>
-                      <span className="text-[#607583]">({c.category})</span>
-                      {c.verified ? (
-                        <StatusBadge variant="verified">Verified</StatusBadge>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </section>
-
-            <section>
-              <SectionTitle>Reliability</SectionTitle>
-              <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm sm:grid-cols-3">
-                <div>
-                  <p className="text-xs font-medium text-[#607583]">Completed shifts</p>
-                  <p className="mt-1 text-lg font-semibold text-[#13334F]">{profile.reliability.completedShifts}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-[#607583]">On-time rate</p>
-                  <p className="mt-1 text-lg font-semibold text-[#13334F]">{profile.reliability.onTimeRatePct}%</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-[#607583]">Repeat requests</p>
-                  <p className="mt-1 text-lg font-semibold text-[#13334F]">{profile.reliability.repeatRequests}</p>
-                </div>
-              </div>
-            </section>
-
-            <section>
-              <SectionTitle>Places you&apos;ve worked together</SectionTitle>
-              <div className="rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
-                {profile.siteFamiliarity.length === 0 ? (
-                  <p className="text-sm text-[#607583]">No completed assignments together yet.</p>
+                {profile.credentials.length === 0 ? (
+                  <p className="text-sm text-[#607583]">No provider-visible credentials are available for this worker yet.</p>
                 ) : (
-                  <ul className="space-y-3">
-                    {profile.siteFamiliarity.map(s => (
-                      <li key={s.siteId} className="flex min-w-0 items-start justify-between gap-3 text-sm">
-                        <span className="flex min-w-0 items-start gap-2">
-                          <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-[#53B59F]" aria-hidden />
-                          <span className="min-w-0 break-words font-medium text-[#13334F]">{s.siteName}</span>
-                        </span>
-                        <span className="shrink-0 text-[#607583]">{s.shiftCount} shifts</span>
+                  <ul className="space-y-2">
+                    {profile.credentials.map(c => (
+                      <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
+                        <Shield className="h-4 w-4 shrink-0 text-[#257665]" aria-hidden />
+                        <span className="font-medium text-[#13334F]">{c.name}</span>
+                        <span className="text-[#607583]">({c.category})</span>
+                        {c.verified ? <StatusBadge variant="verified">Verified</StatusBadge> : <StatusBadge variant="pending">Pending</StatusBadge>}
                       </li>
                     ))}
                   </ul>
@@ -213,10 +186,63 @@ export default function WorkerProfile() {
             </section>
 
             <section>
-              <SectionTitle>Recent work history</SectionTitle>
+              <SectionTitle>{profile.isSupabaseBacked ? 'Verified work history' : 'Reliability'}</SectionTitle>
+              <div className="grid grid-cols-1 gap-3 rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm sm:grid-cols-3">
+                <div>
+                  <p className="text-xs font-medium text-[#607583]">{profile.isSupabaseBacked ? 'Approved shifts together' : 'Completed shifts'}</p>
+                  <p className="mt-1 text-lg font-semibold text-[#13334F]">{profile.reliability.completedShifts}</p>
+                </div>
+                {typeof profile.reliability.onTimeRatePct === 'number' ? (
+                  <div>
+                    <p className="text-xs font-medium text-[#607583]">On-time rate</p>
+                    <p className="mt-1 text-lg font-semibold text-[#13334F]">{profile.reliability.onTimeRatePct}%</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs font-medium text-[#607583]">Care sites together</p>
+                    <p className="mt-1 text-lg font-semibold text-[#13334F]">{profile.distinctSiteCount}</p>
+                  </div>
+                )}
+                {typeof profile.reliability.repeatRequests === 'number' ? (
+                  <div>
+                    <p className="text-xs font-medium text-[#607583]">Repeat requests</p>
+                    <p className="mt-1 text-lg font-semibold text-[#13334F]">{profile.reliability.repeatRequests}</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs font-medium text-[#607583]">Repeat places</p>
+                    <p className="mt-1 text-lg font-semibold text-[#13334F]">{repeatPlaces}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <SectionTitle>Places you&apos;ve worked together</SectionTitle>
+              <div className="rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
+                {profile.siteFamiliarity.length === 0 ? (
+                  <p className="text-sm text-[#607583]">No approved assignments together yet.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {profile.siteFamiliarity.map(s => (
+                      <li key={s.siteId} className="flex min-w-0 items-start justify-between gap-3 text-sm">
+                        <span className="flex min-w-0 items-start gap-2">
+                          <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-[#53B59F]" aria-hidden />
+                          <span className="min-w-0 break-words font-medium text-[#13334F]">{s.siteName}</span>
+                        </span>
+                        <span className="shrink-0 text-[#607583]">{s.shiftCount} approved</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <SectionTitle>{profile.isSupabaseBacked ? 'Recent approved work' : 'Recent work history'}</SectionTitle>
               <div className="rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
                 {profile.recentShifts.length === 0 ? (
-                  <p className="text-sm text-[#607583]">No recent shifts on file for this worker.</p>
+                  <p className="text-sm text-[#607583]">No recent approved work is available for this worker.</p>
                 ) : (
                   <ul className="space-y-3">
                     {profile.recentShifts.map(s => (
@@ -225,9 +251,7 @@ export default function WorkerProfile() {
                           <div className="min-w-0">
                             <p className="font-medium text-[#13334F]">{s.roleTitle}</p>
                             <p className="text-sm text-[#607583]">{s.siteName}</p>
-                            <p className="mt-1 text-xs text-[#9AAAB3]">
-                              {s.dateLabel} · {s.timeRange}
-                            </p>
+                            <p className="mt-1 text-xs text-[#9AAAB3]">{s.dateLabel} · {s.timeRange}</p>
                           </div>
                           <Link
                             to={`/provider/worker-match/${s.shiftId}`}
@@ -243,13 +267,15 @@ export default function WorkerProfile() {
               </div>
             </section>
 
-            <section>
-              <SectionTitle>Provider notes</SectionTitle>
-              <div className="flex gap-3 rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
-                <StickyNote className="mt-0.5 h-5 w-5 shrink-0 text-[#607583]" aria-hidden />
-                <p className="min-w-0 text-sm leading-relaxed text-[#607583]">{profile.providerNotes}</p>
-              </div>
-            </section>
+            {profile.providerNotes ? (
+              <section>
+                <SectionTitle>Provider notes</SectionTitle>
+                <div className="flex gap-3 rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
+                  <StickyNote className="mt-0.5 h-5 w-5 shrink-0 text-[#607583]" aria-hidden />
+                  <p className="min-w-0 text-sm leading-relaxed text-[#607583]">{profile.providerNotes}</p>
+                </div>
+              </section>
+            ) : null}
 
             <section className="space-y-3 pb-4">
               <SectionTitle>Trust actions</SectionTitle>
@@ -277,9 +303,7 @@ export default function WorkerProfile() {
                     e.preventDefault();
                     e.stopPropagation();
                     const shiftHint = profile.recentShifts[0]?.shiftId;
-                    const r = await run(`profile-invite-${profile.id}`, () =>
-                      inviteWorkerToShift(profile.id, shiftHint),
-                    );
+                    const r = await run(`profile-invite-${profile.id}`, () => inviteWorkerToShift(profile.id, shiftHint));
                     if (r.ok) {
                       toast.success(r.data.message);
                       setInviteDone(true);
@@ -287,7 +311,7 @@ export default function WorkerProfile() {
                   }}
                   className="w-full rounded-xl border border-[#DDE7E8] bg-white px-4 py-3 text-sm font-semibold text-[#13334F] transition-colors hover:bg-[#F7FAFA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
                 >
-                  {inviteDone ? 'Invited' : 'Invite to Shift'}
+                  {inviteDone ? 'Invited' : shiftsTogether > 0 ? 'Invite back to a shift' : 'Invite to Shift'}
                 </button>
                 <button
                   type="button"
@@ -306,6 +330,11 @@ export default function WorkerProfile() {
                   {dnsDone ? 'Marked do not send' : 'Do Not Send'}
                 </button>
               </div>
+              {profile.isSupabaseBacked ? (
+                <p className="text-xs leading-relaxed text-[#607583]">
+                  Shared-history counts above come from approved timesheets. Bench, invite, and do-not-send persistence remain separate provider actions.
+                </p>
+              ) : null}
             </section>
           </>
         )}
@@ -319,7 +348,7 @@ function NotFoundCard() {
     <div className="mx-auto mt-4 w-full max-w-md rounded-2xl border border-[#DDE7E8] bg-white p-8 text-center shadow-sm">
       <ClipboardList className="mx-auto h-10 w-10 text-[#607583]" aria-hidden />
       <h1 className="mt-4 text-lg font-semibold text-[#13334F]">Worker not found</h1>
-      <p className="mt-2 text-sm text-[#607583]">We couldn&apos;t load this worker in your Evergreen preview.</p>
+      <p className="mt-2 text-sm text-[#607583]">We couldn&apos;t load this worker for your provider workspace.</p>
       <Link
         to="/provider/bench"
         className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-[#13334F] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#0B243A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F]"
