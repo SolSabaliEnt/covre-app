@@ -17,6 +17,7 @@ export * from './continuityService';
 export * from './continuityTelemetryService';
 export * from './providerService';
 export * from './providerWorkerProfileService';
+export * from './providerWorkerRelationshipService';
 export * from './adminService';
 export * from './adminContinuityService';
 export * from './referralService';
