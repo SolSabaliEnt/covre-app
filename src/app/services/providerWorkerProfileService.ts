@@ -20,7 +20,8 @@ export async function getCanonicalProviderWorkerProfile(
 ): Promise<ApiResult<ProviderWorkerProfileView | null>> {
   if (getBackendMode() !== 'supabase') {
     const result = await getProviderWorkerProfile(workerId);
-    if (!result.ok || !result.data) return result;
+    if (!result.ok) return { ok: false, error: result.error };
+    if (!result.data) return { ok: true, data: null };
 
     const relationship = await getProviderWorkerRelationship(workerId);
     return {
@@ -38,7 +39,7 @@ export async function getCanonicalProviderWorkerProfile(
   }
 
   const organization = await getCurrentProviderOrganizationFromSupabase();
-  if (!organization.ok) return organization;
+  if (!organization.ok) return { ok: false, error: organization.error };
   if (!organization.data) {
     return {
       ok: false,
@@ -50,10 +51,11 @@ export async function getCanonicalProviderWorkerProfile(
   }
 
   const profile = await getProviderWorkerProfileFromSupabase(organization.data.providerId, workerId);
-  if (!profile.ok || !profile.data) return profile;
+  if (!profile.ok) return { ok: false, error: profile.error };
+  if (!profile.data) return { ok: true, data: null };
 
   const relationship = await getProviderWorkerRelationship(workerId);
-  if (!relationship.ok) return relationship;
+  if (!relationship.ok) return { ok: false, error: relationship.error };
 
   return {
     ok: true,
