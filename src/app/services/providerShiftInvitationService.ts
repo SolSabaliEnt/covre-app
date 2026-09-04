@@ -15,6 +15,7 @@ import {
 } from '../repositories/providerShiftInvitationsRepository';
 
 const MOCK_STORAGE_KEY = 'covre.provider-shift-invitations.v1';
+const MOCK_CURRENT_WORKER_ID = 'worker-001';
 const mockFallback: WorkerShiftInvitation[] = [];
 
 function readMockInvitations(): WorkerShiftInvitation[] {
@@ -107,7 +108,9 @@ export async function listWorkerShiftInvitations(): Promise<ApiResult<WorkerShif
 
   return mockRequest(() =>
     readMockInvitations().filter(
-      invitation => invitation.status === 'pending' || invitation.status === 'viewed',
+      invitation =>
+        invitation.workerId === MOCK_CURRENT_WORKER_ID &&
+        (invitation.status === 'pending' || invitation.status === 'viewed'),
     ),
   );
 }
@@ -126,7 +129,9 @@ export async function respondToWorkerShiftInvitation(
 
   return mockRequest(() => {
     const invitations = readMockInvitations();
-    const invitation = invitations.find(row => row.id === invitationId);
+    const invitation = invitations.find(
+      row => row.id === invitationId && row.workerId === MOCK_CURRENT_WORKER_ID,
+    );
     if (!invitation) {
       throw new Error('Invitation not found.');
     }
