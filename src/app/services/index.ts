@@ -12,6 +12,7 @@ export type { ApiResult, ApiError, ApiListResult, ApiStatus } from '../api/types
 
 export * from './types';
 export * from './workerService';
+export * from './workerContinuityPreferenceService';
 export * from './providerService';
 export * from './adminService';
 export * from './adminContinuityService';
