@@ -3,6 +3,19 @@ import { Link, useLocation } from 'react-router';
 import { Eye, LockKeyhole, Smartphone } from 'lucide-react';
 import { isSupabaseBackendEnabled } from '../lib/backendMode';
 
+function previewTarget(pathname: string): string {
+  if (pathname === '/admin/full-app/provider') {
+    return '/provider?adminPreview=1';
+  }
+  if (pathname.startsWith('/admin/full-app/provider/')) {
+    return `${pathname.replace('/admin/full-app/provider', '/provider')}?adminPreview=1`;
+  }
+  if (pathname.startsWith('/admin/full-app/worker/')) {
+    return `${pathname.replace('/admin/full-app/worker', '/worker')}?adminPreview=1`;
+  }
+  return '/';
+}
+
 export function AdminPreviewFrame({
   audience,
   children: _children,
@@ -12,10 +25,7 @@ export function AdminPreviewFrame({
 }) {
   const supabaseMode = isSupabaseBackendEnabled();
   const location = useLocation();
-  const renderPath = location.pathname.replace(
-    '/admin/full-app/',
-    '/admin/preview-render/',
-  );
+  const renderPath = previewTarget(location.pathname);
 
   return (
     <div className="min-h-full bg-[#F3F7F7]">
@@ -80,7 +90,7 @@ export function AdminPreviewFrame({
         </div>
 
         <p className="mx-auto mt-4 max-w-xl text-center text-xs leading-5 text-[#607583]">
-          The preview now runs in its own 390 × 844 browser viewport, so mobile breakpoints and viewport-height spacing match the real app. Interactions remain disabled.
+          The preview runs the real {audience.toLowerCase()} route inside its own 390 × 844 browser viewport. Mobile breakpoints, viewport-height spacing, and the actual app shell now render as they do on a phone; interactions remain disabled.
         </p>
       </div>
     </div>
