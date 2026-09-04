@@ -82,15 +82,26 @@ export function AdminPreviewFrame({
               src={renderPath}
               width="390"
               height="844"
-              tabIndex={-1}
               sandbox="allow-scripts allow-same-origin"
-              className="pointer-events-none block h-[844px] w-[390px] max-w-full border-0 bg-white"
+              onLoad={event => {
+                const doc = event.currentTarget.contentDocument;
+                if (!doc) return;
+
+                const blockMutation = (interaction: Event) => {
+                  interaction.preventDefault();
+                  interaction.stopPropagation();
+                };
+
+                doc.addEventListener('click', blockMutation, true);
+                doc.addEventListener('submit', blockMutation, true);
+              }}
+              className="block h-[844px] w-[390px] max-w-full border-0 bg-white"
             />
           </div>
         </div>
 
         <p className="mx-auto mt-4 max-w-xl text-center text-xs leading-5 text-[#607583]">
-          The preview runs the real {audience.toLowerCase()} route inside its own 390 × 844 browser viewport. Mobile breakpoints, viewport-height spacing, and the actual app shell now render as they do on a phone; interactions remain disabled.
+          Scroll freely inside the 390 × 844 mobile viewport. Clicks and form submissions remain blocked so the Super Admin preview stays read only.
         </p>
       </div>
     </div>
