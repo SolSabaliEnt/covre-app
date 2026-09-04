@@ -4,10 +4,10 @@ import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { ArrowLeft, MapPin, Shield, Star, Building2, ClipboardList, StickyNote, Repeat2 } from 'lucide-react';
 import { StatusBadge } from '../../components/StatusBadge';
+import { ProviderShiftInviteControl } from '../../components/ProviderShiftInviteControl';
 import {
   addWorkerToBench,
   getCanonicalProviderWorkerProfile,
-  inviteWorkerToShift,
   markWorkerDoNotSend,
 } from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
@@ -48,12 +48,10 @@ export default function WorkerProfile() {
   const { data: profile, error, loading, reload } = useAsyncResource(loader, [workerId]);
   const { run, isPending } = useProviderAction();
   const [benchDone, setBenchDone] = useState(false);
-  const [inviteDone, setInviteDone] = useState(false);
   const [dnsDone, setDnsDone] = useState(false);
 
   useEffect(() => {
     setBenchDone(false);
-    setInviteDone(false);
     setDnsDone(false);
   }, [workerId]);
 
@@ -278,7 +276,7 @@ export default function WorkerProfile() {
             ) : null}
 
             <section className="space-y-3 pb-4">
-              <SectionTitle>Trust actions</SectionTitle>
+              <SectionTitle>Relationship actions</SectionTitle>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <button
                   type="button"
@@ -294,24 +292,7 @@ export default function WorkerProfile() {
                   }}
                   className="w-full rounded-xl bg-[#53B59F] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#2F8E7A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#13334F] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
                 >
-                  {benchDone ? 'Added to Bench' : 'Add to Bench'}
-                </button>
-                <button
-                  type="button"
-                  disabled={inviteDone || isPending(`profile-invite-${profile.id}`)}
-                  onClick={async e => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const shiftHint = profile.recentShifts[0]?.shiftId;
-                    const r = await run(`profile-invite-${profile.id}`, () => inviteWorkerToShift(profile.id, shiftHint));
-                    if (r.ok) {
-                      toast.success(r.data.message);
-                      setInviteDone(true);
-                    } else toast.error(r.error.message);
-                  }}
-                  className="w-full rounded-xl border border-[#DDE7E8] bg-white px-4 py-3 text-sm font-semibold text-[#13334F] transition-colors hover:bg-[#F7FAFA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
-                >
-                  {inviteDone ? 'Invited' : shiftsTogether > 0 ? 'Invite back to a shift' : 'Invite to Shift'}
+                  {benchDone ? 'Added to Bench' : profile.isPreferredBench ? 'On your Bench' : 'Add to Bench'}
                 </button>
                 <button
                   type="button"
@@ -330,9 +311,12 @@ export default function WorkerProfile() {
                   {dnsDone ? 'Marked do not send' : 'Do Not Send'}
                 </button>
               </div>
+
+              <ProviderShiftInviteControl workerId={profile.id} hasPriorHistory={shiftsTogether > 0} />
+
               {profile.isSupabaseBacked ? (
                 <p className="text-xs leading-relaxed text-[#607583]">
-                  Shared-history counts above come from approved timesheets. Bench, invite, and do-not-send persistence remain separate provider actions.
+                  Approved-work history, provider relationship state, and shift invitations are separate records. An invitation never books the worker automatically.
                 </p>
               ) : null}
             </section>
