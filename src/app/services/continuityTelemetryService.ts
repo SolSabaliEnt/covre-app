@@ -115,6 +115,7 @@ export function getContinuityTelemetrySummary(): ContinuityTelemetrySummary {
   const familiarOpportunityOpens = count(events, 'worker_familiar_opportunity_open');
   const familiarShiftDetailViews = count(events, 'worker_familiar_shift_detail_view');
   const familiarShiftApplications = count(events, 'worker_familiar_shift_application');
+  const lastEvent = events.length > 0 ? events[events.length - 1] : undefined;
 
   return {
     totalEvents: events.length,
@@ -128,7 +129,7 @@ export function getContinuityTelemetrySummary(): ContinuityTelemetrySummary {
     providerRebookActions: count(events, 'provider_rebook_action'),
     familiarOpportunityOpenRatePct: percent(familiarOpportunityOpens, familiarOpportunityImpressions),
     familiarApplicationRatePct: percent(familiarShiftApplications, familiarShiftDetailViews),
-    lastEventAt: events.at(-1)?.occurredAt,
+    lastEventAt: lastEvent?.occurredAt,
     storage: 'browser_local_preview',
   };
 }
