@@ -4,6 +4,7 @@ import { CalendarPlus, Heart, Repeat2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   addShiftToCalendar,
+  getWorkerContinuitySummary,
   listWorkerBookings,
   listWorkerSiteReturnPreferences,
   saveWorkerSiteReturnPreference,
@@ -19,10 +20,17 @@ import {
 } from '../../lib/workerRateCents';
 import type { Shift } from '../../data/types';
 import {
-  buildWorkerContinuity,
   buildWorkerContinuityRecognition,
   getSiteContinuity,
+  type WorkerContinuitySummary,
 } from '../../lib/workerContinuity';
+
+const EMPTY_CONTINUITY: WorkerContinuitySummary = {
+  totalCompletedShifts: 0,
+  familiarSiteCount: 0,
+  repeatSiteCount: 0,
+  sites: {},
+};
 
 function LoadingBlock() {
   return (
@@ -105,7 +113,7 @@ function BookingCard({
         <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#BFDCD5] bg-[#E6F6F2] px-3 py-2.5 text-sm text-[#257665]">
           <Repeat2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span>
-            {workedHereCount >= 5 ? 'One of your regular places' : 'A familiar place'} · worked here {workedHereCount}×
+            {workedHereCount >= 5 ? 'One of your regular places' : 'A familiar place'} · {workedHereCount} approved shifts here
           </span>
         </div>
       ) : null}
@@ -161,6 +169,7 @@ function BookingCard({
 export default function WorkerBookings() {
   const supabaseMode = isSupabaseBackendEnabled();
   const { data, error, loading, reload } = useAsyncResource(() => listWorkerBookings(), []);
+  const { data: continuityData } = useAsyncResource(() => getWorkerContinuitySummary(), []);
   const { data: savedReturnPreferenceSites } = useAsyncResource(() => listWorkerSiteReturnPreferences(), []);
   const { run, isPending } = useWorkerAction();
   const [calendarAddedByShift, setCalendarAddedByShift] = useState<Record<string, boolean>>({});
@@ -174,7 +183,7 @@ export default function WorkerBookings() {
   }, [savedReturnPreferenceSites]);
 
   const isEmpty = data && data.upcoming.length === 0 && data.completed.length === 0;
-  const continuity = useMemo(() => buildWorkerContinuity(data), [data]);
+  const continuity = continuityData ?? EMPTY_CONTINUITY;
   const recognition = useMemo(() => buildWorkerContinuityRecognition(continuity), [continuity]);
 
   return (
@@ -183,7 +192,7 @@ export default function WorkerBookings() {
         <h1 className="text-2xl font-semibold text-[#13334F]">Bookings</h1>
         <p className="mt-2 text-sm text-[#607583]">
           {supabaseMode
-            ? 'Confirmed shifts with accepted pay rates frozen at booking time. Earnings are not generated until timesheet approval.'
+            ? 'Bookings and accepted pay stay here; continuity recognition is based on approved work only.'
             : 'Track confirmed shifts, upcoming work, and completed coverage.'}
         </p>
       </header>
