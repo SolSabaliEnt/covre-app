@@ -4,6 +4,32 @@
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <script>
+        (function () {
+          var key = 'covre:spa-redirect';
+          var target = null;
+
+          try {
+            target = window.sessionStorage.getItem(key);
+            if (target) window.sessionStorage.removeItem(key);
+          } catch (error) {
+            // sessionStorage can be unavailable in restrictive privacy modes.
+          }
+
+          if (!target) {
+            try {
+              target = new URLSearchParams(window.location.search).get('__covre_spa_redirect');
+            } catch (error) {
+              target = null;
+            }
+          }
+
+          // Restore only same-origin application paths before React Router reads the location.
+          if (target && target.charAt(0) === '/' && target.indexOf('//') !== 0) {
+            window.history.replaceState(null, '', target);
+          }
+        })();
+      </script>
       <title>Covre | Care staffing. Covered.</title>
       <meta name="description" content="Covre is a mobile-first care staffing platform connecting providers with verified care workers for covered shifts." />
 
