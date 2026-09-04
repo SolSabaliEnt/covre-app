@@ -34,6 +34,8 @@ type InvitationRow = {
   status: string
   created_at: string
   updated_at: string
+  resolved_at: string | null
+  resolution_reason: string | null
 }
 
 type WorkerProfileRow = {
@@ -53,7 +55,10 @@ function ok<T>(data: T): ApiResult<T> {
 
 function friendlyDbMessage(err: { message?: string; code?: string }, fallback: string): string {
   const raw = err.message ?? fallback
-  if (/provider_shift_invitations|relation .* does not exist/i.test(raw)) {
+  if (/resolved_at|resolution_reason|column.*does not exist|42703/i.test(raw)) {
+    return "Terminal coverage reconciliation requires the Covre Slice 19 migration."
+  }
+  if (/provider_shift_invitations|relation .*does not exist/i.test(raw)) {
     return "Invitation-aware applicant review requires the Covre provider shift invitation migration."
   }
   if (/row-level security|RLS|permission denied|42501/i.test(raw)) {
@@ -262,7 +267,7 @@ export async function listProviderShiftApplicantReviewFromSupabase(
         .order("created_at", { ascending: false }),
       supabase
         .from("provider_shift_invitations")
-        .select("id, shift_id, worker_id, status, created_at, updated_at")
+        .select("id, shift_id, worker_id, status, created_at, updated_at, resolved_at, resolution_reason")
         .eq("provider_id", providerId)
         .eq("shift_id", shiftId)
         .order("created_at", { ascending: false }),
@@ -320,11 +325,14 @@ export async function listProviderShiftApplicantReviewFromSupabase(
 
       let reviewState: ProviderShiftApplicantReview["reviewState"] = "applied"
       if (requestStatus === "accepted") reviewState = "booked"
+      else if (invitation?.resolution_reason === "shift_covered_elsewhere") reviewState = "covered_elsewhere"
       else if (requestStatus === "withdrawn") reviewState = "withdrawn"
-      else if (requestStatus === "rejected") reviewState = "declined"
+      else if (requestStatus === "rejected") reviewState = invitation?.resolution_reason ? "covered_elsewhere" : "declined"
       else if (invitation?.status === "accepted") reviewState = "invited_accepted"
       else if (invitation && (invitation.status === "pending" || invitation.status === "viewed")) reviewState = "invited"
+      else if (invitation?.status === "withdrawn" && invitation.resolution_reason === "shift_covered") reviewState = "covered_elsewhere"
       else if (invitation?.status === "declined") reviewState = "declined"
+      else if (invitation?.status === "withdrawn") reviewState = "withdrawn"
 
       return {
         requestId: request?.id,
@@ -341,6 +349,8 @@ export async function listProviderShiftApplicantReviewFromSupabase(
               status: invitation.status as ProviderShiftInvitationStatus,
               invitedAt: invitation.created_at,
               updatedAt: invitation.updated_at,
+              resolvedAt: invitation.resolved_at ?? undefined,
+              resolutionReason: invitation.resolution_reason ?? undefined,
             }
           : undefined,
         reviewState,
@@ -349,23 +359,27 @@ export async function listProviderShiftApplicantReviewFromSupabase(
     })
 
     const stateWeight: Record<ProviderShiftApplicantReview["reviewState"], number> = {
-      invited_accepted: 0,
-      applied: 1,
-      invited: 2,
-      booked: 3,
-      withdrawn: 4,
-      declined: 5,
+      booked: 0,
+      invited_accepted: 1,
+      applied: 2,
+      invited: 3,
+      covered_elsewhere: 4,
+      withdrawn: 5,
+      declined: 6,
     }
     applicants.sort((a, b) => stateWeight[a.reviewState] - stateWeight[b.reviewState])
 
+    const hasBooked = applicants.some(applicant => applicant.reviewState === "booked")
     return ok({
       shiftId,
       applicants,
-      canConfirmBookings: true,
+      canConfirmBookings: !hasBooked,
       message:
-        applicants.length > 0
-          ? "Invitations and applications are shown together. Worker acceptance still requires provider booking confirmation."
-          : undefined,
+        hasBooked
+          ? "Coverage is secured. Competing pending applications and invitations were closed automatically."
+          : applicants.length > 0
+            ? "Invitations and applications are shown together. Worker acceptance still requires provider booking confirmation."
+            : undefined,
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : "Request failed."
