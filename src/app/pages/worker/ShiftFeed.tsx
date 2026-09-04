@@ -5,7 +5,7 @@ import { Link } from 'react-router';
 import { Bookmark, Heart, Repeat2, Shield, Settings, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import {
-  listWorkerBookings,
+  getWorkerContinuitySummary,
   listWorkerShiftRequests,
   listWorkerShifts,
   listWorkerSiteReturnPreferences,
@@ -18,7 +18,7 @@ import { cn } from '../../components/ui/utils';
 import { isSupabaseBackendEnabled } from '../../lib/backendMode';
 import { displayWorkerPay } from '../../lib/workerRateCents';
 import { WORKER_ENTRY_PATH } from '../../lib/entryRoutes';
-import { buildWorkerContinuity, getSiteContinuity } from '../../lib/workerContinuity';
+import { getSiteContinuity, type WorkerContinuitySummary } from '../../lib/workerContinuity';
 
 const filters = [
   'Nearby',
@@ -31,6 +31,13 @@ const filters = [
   'Group Home',
   'Assisted Living',
 ];
+
+const EMPTY_CONTINUITY: WorkerContinuitySummary = {
+  totalCompletedShifts: 0,
+  familiarSiteCount: 0,
+  repeatSiteCount: 0,
+  sites: {},
+};
 
 type ViewMode = 'list' | 'map';
 
@@ -79,7 +86,7 @@ function EmptyShiftState({ supabaseMode }: { supabaseMode?: boolean }) {
 export default function ShiftFeed() {
   const supabaseMode = isSupabaseBackendEnabled();
   const { data: shifts, error, loading, reload } = useAsyncResource(() => listWorkerShifts(), []);
-  const { data: bookings } = useAsyncResource(() => listWorkerBookings(), []);
+  const { data: continuityData } = useAsyncResource(() => getWorkerContinuitySummary(), []);
   const { data: returnPreferenceSites } = useAsyncResource(() => listWorkerSiteReturnPreferences(), []);
   const { data: requests } = useAsyncResource(
     () =>
@@ -89,7 +96,7 @@ export default function ShiftFeed() {
     [supabaseMode],
   );
 
-  const continuity = useMemo(() => buildWorkerContinuity(bookings), [bookings]);
+  const continuity = continuityData ?? EMPTY_CONTINUITY;
   const preferredReturnSites = useMemo(() => new Set(returnPreferenceSites ?? []), [returnPreferenceSites]);
   const appliedShiftIds = new Set(
     (requests ?? [])
@@ -199,7 +206,7 @@ export default function ShiftFeed() {
             <div className="mt-4 grid grid-cols-3 gap-3">
               <div>
                 <p className="text-xl font-semibold text-[#13334F]">{continuity.totalCompletedShifts}</p>
-                <p className="text-xs text-[#607583]">completed</p>
+                <p className="text-xs text-[#607583]">approved work</p>
               </div>
               <div>
                 <p className="text-xl font-semibold text-[#13334F]">{continuity.familiarSiteCount}</p>
@@ -274,8 +281,8 @@ export default function ShiftFeed() {
                 </p>
                 <p className="mt-1 text-sm leading-5 text-[#607583]">
                   {familiarOpportunity.workerWantsReturn
-                    ? `You privately told Covre you’d work here again, and you have ${familiarOpportunity.history.completedShifts} completed ${familiarOpportunity.history.completedShifts === 1 ? 'shift' : 'shifts'} here. Covre can use that preference to help surface this opportunity for you.`
-                    : `You have completed ${familiarOpportunity.history.completedShifts} ${familiarOpportunity.history.completedShifts === 1 ? 'shift' : 'shifts'} here. Familiarity is one reason Covre is surfacing this opportunity — alongside pay, readiness, and distance.`}
+                    ? `You privately told Covre you’d work here again, and you have ${familiarOpportunity.history.completedShifts} approved ${familiarOpportunity.history.completedShifts === 1 ? 'shift' : 'shifts'} here. Covre can use that preference to help surface this opportunity for you.`
+                    : `You have ${familiarOpportunity.history.completedShifts} approved ${familiarOpportunity.history.completedShifts === 1 ? 'shift' : 'shifts'} here. Familiarity is one reason Covre is surfacing this opportunity — alongside pay, readiness, and distance.`}
                 </p>
               </div>
             </div>
@@ -305,7 +312,7 @@ export default function ShiftFeed() {
       )}
 
       {supabaseMode && (
-        <p className="mx-4 mt-4 text-xs text-[#9AAAB3]">Real open shifts from Covre. Apply from shift detail; save and calendar stay simulated.</p>
+        <p className="mx-4 mt-4 text-xs text-[#9AAAB3]">Real open shifts from Covre. Familiarity uses approved work history; apply from shift detail.</p>
       )}
 
       {loading && <LoadingBlock />}
@@ -327,7 +334,7 @@ export default function ShiftFeed() {
           ) : previouslyWorkedOnly ? (
             <div className="rounded-2xl border border-[#DDE7E8] bg-white p-8 text-center shadow-sm">
               <p className="text-sm font-medium text-[#13334F]">No open shifts at familiar places right now.</p>
-              <p className="mt-2 text-xs text-[#607583]">Your history stays here when those sites post again.</p>
+              <p className="mt-2 text-xs text-[#607583]">Your approved work history stays here when those sites post again.</p>
               <button type="button" onClick={() => setPreviouslyWorkedOnly(false)} className="mt-4 text-sm font-semibold text-[#53B59F] hover:underline">
                 Show all shifts
               </button>
@@ -383,7 +390,7 @@ export default function ShiftFeed() {
                             </span>
                             <span className="font-semibold text-[#257665]">Worked here {siteHistory.completedShifts}×</span>
                           </div>
-                          {siteHistory.lastWorkedLabel && <p className="mt-2 text-[#607583]">Last here: {siteHistory.lastWorkedLabel}</p>}
+                          {siteHistory.lastWorkedLabel && <p className="mt-2 text-[#607583]">Last approved work: {siteHistory.lastWorkedLabel}</p>}
                         </div>
                       )}
                     </ShiftCard>
