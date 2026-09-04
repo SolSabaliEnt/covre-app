@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { CalendarPlus } from 'lucide-react';
+import { CalendarPlus, Repeat2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { addShiftToCalendar, listWorkerBookings } from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
@@ -13,6 +13,11 @@ import {
   hasWorkerRateSnapshot,
 } from '../../lib/workerRateCents';
 import type { Shift } from '../../data/types';
+import {
+  buildWorkerContinuity,
+  buildWorkerContinuityRecognition,
+  getSiteContinuity,
+} from '../../lib/workerContinuity';
 
 function LoadingBlock() {
   return (
@@ -46,6 +51,7 @@ function BookingCard({
   calendarPending,
   showActiveShift,
   supabaseMode,
+  workedHereCount,
 }: {
   shift: Shift;
   statusDisplay: string;
@@ -55,6 +61,7 @@ function BookingCard({
   calendarPending: boolean;
   showActiveShift: boolean;
   supabaseMode: boolean;
+  workedHereCount?: number;
 }) {
   const payLabel = acceptedPayRateLabel(
     supabaseMode,
@@ -87,6 +94,16 @@ function BookingCard({
         </div>
         <StatusBadge variant="covered">{statusDisplay}</StatusBadge>
       </div>
+
+      {workedHereCount && workedHereCount > 1 ? (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#BFDCD5] bg-[#E6F6F2] px-3 py-2.5 text-sm text-[#257665]">
+          <Repeat2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span>
+            {workedHereCount >= 5 ? 'One of your regular places' : 'A familiar place'} · worked here {workedHereCount}×
+          </span>
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Link
           to={`/worker/shift/${shift.id}`}
@@ -124,6 +141,11 @@ export default function WorkerBookings() {
 
   const isEmpty =
     data && data.upcoming.length === 0 && data.completed.length === 0;
+  const continuity = useMemo(() => buildWorkerContinuity(data), [data]);
+  const recognition = useMemo(
+    () => buildWorkerContinuityRecognition(continuity),
+    [continuity],
+  );
 
   return (
     <div className="min-h-[100svh] w-full max-w-full overflow-x-hidden bg-[#F7FAFA] px-4 py-6 text-[#10283D]">
@@ -139,6 +161,28 @@ export default function WorkerBookings() {
       <div className="space-y-8 py-4">
         {loading && <LoadingBlock />}
         {error && <ErrorBlock message={error.message} onRetry={reload} />}
+
+        {!loading && !error && recognition && (
+          <section className="rounded-2xl border border-[#BFDCD5] bg-[#E6F6F2] p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#257665]">
+              {recognition.eyebrow}
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-[#13334F]">{recognition.headline}</h2>
+            <p className="mt-2 text-sm leading-6 text-[#607583]">{recognition.detail}</p>
+            <div className="mt-5 grid grid-cols-2 gap-4 border-t border-[#BFDCD5] pt-4">
+              <div>
+                <p className="text-2xl font-semibold text-[#13334F]">{recognition.primaryValue}</p>
+                <p className="text-xs text-[#607583]">{recognition.primaryLabel}</p>
+              </div>
+              {typeof recognition.secondaryValue === 'number' ? (
+                <div>
+                  <p className="text-2xl font-semibold text-[#13334F]">{recognition.secondaryValue}</p>
+                  <p className="text-xs text-[#607583]">{recognition.secondaryLabel}</p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        )}
 
         {!loading && !error && isEmpty && (
           <div className="rounded-2xl border border-[#DDE7E8] bg-white p-8 text-center shadow-sm">
@@ -172,6 +216,7 @@ export default function WorkerBookings() {
                       isUpcoming
                       supabaseMode={supabaseMode}
                       showActiveShift={!supabaseMode}
+                      workedHereCount={getSiteContinuity(continuity, shift.siteId)?.completedShifts}
                       calendarAdded={!!calendarAddedByShift[shift.id]}
                       calendarPending={isPending(`cal-${shift.id}`)}
                       onAddToCalendar={async () => {
@@ -203,6 +248,7 @@ export default function WorkerBookings() {
                       isUpcoming={false}
                       supabaseMode={supabaseMode}
                       showActiveShift={false}
+                      workedHereCount={getSiteContinuity(continuity, shift.siteId)?.completedShifts}
                       calendarAdded={!!calendarAddedByShift[shift.id]}
                       calendarPending={isPending(`cal-${shift.id}`)}
                       onAddToCalendar={async () => {
