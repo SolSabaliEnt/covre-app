@@ -2,11 +2,12 @@ import { Link, useParams } from 'react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { StatusBadge } from '../../components/StatusBadge';
-import { ArrowLeft, MapPin, Star, CheckCircle2, Shield, TrendingUp } from 'lucide-react';
+import { ArrowLeft, MapPin, Star, CheckCircle2, Shield, TrendingUp, Repeat2 } from 'lucide-react';
 import {
   addWorkerToBench,
   bookWorkerForShift,
   getProviderWorkerMatchPage,
+  getProviderWorkerProfile,
 } from '../../services';
 import type { ProviderWorkerMatchPage } from '../../services/types';
 import { useProviderAction } from '../../hooks/useProviderAction';
@@ -91,6 +92,21 @@ export default function WorkerMatch() {
     [shiftId],
   );
 
+  const { data: siteHistoryByWorker } = useAsyncResource(async () => {
+    if (!page) return { ok: true as const, data: {} as Record<string, number> };
+
+    const entries = await Promise.all(
+      page.candidates.map(async worker => {
+        const result = await getProviderWorkerProfile(worker.id);
+        if (!result.ok || !result.data) return [worker.id, 0] as const;
+        const siteHistory = result.data.siteFamiliarity.find(site => site.siteId === page.shift.siteId);
+        return [worker.id, siteHistory?.shiftCount ?? 0] as const;
+      }),
+    );
+
+    return { ok: true as const, data: Object.fromEntries(entries) as Record<string, number> };
+  }, [page?.shift.id]);
+
   const isSupabaseSimulated = page?.source === 'supabase_shift_mock_candidates';
 
   if (!shiftId) {
@@ -157,149 +173,170 @@ export default function WorkerMatch() {
           <div className="text-sm text-[#607583]">
             {isSupabaseSimulated
               ? 'Demo workers shown for layout review; matching is not connected yet.'
-              : 'All workers meet credential requirements'}
+              : 'Credential fit and prior site history are shown together.'}
           </div>
         </div>
 
         <div className="space-y-4">
-          {candidates.map(worker => (
-            <div
-              key={worker.id}
-              className="rounded-xl border border-[#DDE7E8] bg-white p-4 transition-all hover:border-[#53B59F] sm:p-6"
-            >
-              <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex min-w-0 items-start gap-4">
+          {candidates.map(worker => {
+            const priorShiftsHere = siteHistoryByWorker?.[worker.id] ?? 0;
+            return (
+              <div
+                key={worker.id}
+                className="rounded-xl border border-[#DDE7E8] bg-white p-4 transition-all hover:border-[#53B59F] sm:p-6"
+              >
+                <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-4">
+                    <Link
+                      to={`/provider/workers/${worker.id}`}
+                      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#53B59F] text-xl font-semibold text-white no-underline transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] sm:h-16 sm:w-16"
+                      aria-label={`Open profile for ${worker.name}`}
+                    >
+                      {worker.name
+                        .split(' ')
+                        .map(n => n[0])
+                        .join('')}
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <Link
+                          to={`/provider/workers/${worker.id}`}
+                          className="break-words text-lg font-semibold text-[#13334F] no-underline hover:text-[#53B59F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] sm:text-xl"
+                        >
+                          {worker.name}
+                        </Link>
+                        {worker.status === 'preferred' ? (
+                          <StatusBadge variant="preferred">Preferred</StatusBadge>
+                        ) : null}
+                        {priorShiftsHere > 0 ? (
+                          <StatusBadge variant="verified">Familiar here</StatusBadge>
+                        ) : null}
+                      </div>
+                      <div className="text-[#607583]">{worker.role}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-4 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Star className="h-4 w-4 text-[#53B59F]" />
+                          <span className="font-medium text-[#13334F]">{worker.score}</span>
+                          <span className="text-[#607583]">Covre Score</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[#607583]">
+                          <MapPin className="h-4 w-4" />
+                          {worker.distance}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-left sm:text-right">
+                    <div className="text-3xl font-semibold text-[#53B59F]">{worker.score}</div>
+                    <div className="text-xs text-[#607583]">Match Score</div>
+                  </div>
+                </div>
+
+                <div className="mb-3 grid grid-cols-1 gap-3 rounded-lg bg-[#F7FAFA] p-4 sm:grid-cols-3">
+                  <div>
+                    <div className="mb-1 flex items-center gap-1 text-[#607583]">
+                      <TrendingUp className="h-4 w-4" />
+                      <span className="text-xs">On-Time Rate</span>
+                    </div>
+                    <div className="text-lg font-semibold text-[#13334F]">{worker.onTime}%</div>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center gap-1 text-[#607583]">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="text-xs">Worked Here</span>
+                    </div>
+                    <div className="text-lg font-semibold text-[#13334F]">{priorShiftsHere}×</div>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center gap-1 text-[#607583]">
+                      <Shield className="h-4 w-4" />
+                      <span className="text-xs">Credentials</span>
+                    </div>
+                    <div className="text-lg font-semibold text-[#13334F]">{worker.credentials.length}</div>
+                  </div>
+                </div>
+
+                <div
+                  className={`mb-4 flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm ${
+                    priorShiftsHere > 0
+                      ? 'border border-[#BFDCD5] bg-[#E6F6F2] text-[#257665]'
+                      : 'border border-[#DDE7E8] bg-[#F7FAFA] text-[#607583]'
+                  }`}
+                >
+                  <Repeat2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  <span>
+                    {priorShiftsHere > 0
+                      ? `You have worked with ${worker.name} at ${shift.siteName} ${priorShiftsHere} ${priorShiftsHere === 1 ? 'time' : 'times'} before.`
+                      : `New relationship at ${shift.siteName}. No completed shifts together here yet.`}
+                  </span>
+                </div>
+
+                <div className="mb-4">
+                  <div className="mb-2 text-sm font-medium text-[#13334F]">Verified Credentials</div>
+                  <div className="flex flex-wrap gap-2">
+                    {worker.credentials.map(cred => (
+                      <span
+                        key={cred}
+                        className="flex items-center gap-1 rounded-full bg-[#E6F6F2] px-3 py-1 text-xs font-medium text-[#257665]"
+                      >
+                        <Shield className="h-3 w-3" />
+                        {cred}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    disabled={bookedByWorker[worker.id] || isPending(`book-${worker.id}`)}
+                    onClick={async e => {
+                      e.stopPropagation();
+                      const r = await run(`book-${worker.id}`, () =>
+                        bookWorkerForShift(worker.id, shift.id),
+                      );
+                      if (r.ok) {
+                        toast.success(r.data.message);
+                        setBookedByWorker(prev => ({ ...prev, [worker.id]: true }));
+                      } else toast.error(r.error.message);
+                    }}
+                    className="w-full rounded-lg bg-[#53B59F] px-6 py-3 font-medium text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
+                  >
+                    {bookedByWorker[worker.id]
+                      ? isSupabaseSimulated
+                        ? 'Simulated booking'
+                        : 'Booked'
+                      : 'Book Worker'}
+                  </button>
                   <Link
                     to={`/provider/workers/${worker.id}`}
-                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#53B59F] text-xl font-semibold text-white no-underline transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] sm:h-16 sm:w-16"
-                    aria-label={`Open profile for ${worker.name}`}
+                    className="flex w-full items-center justify-center rounded-lg bg-[#E8EEF2] px-6 py-3 text-center font-medium text-[#13334F] no-underline transition-colors hover:bg-[#DDE7E8] sm:flex-1"
                   >
-                    {worker.name
-                      .split(' ')
-                      .map(n => n[0])
-                      .join('')}
+                    View Profile
                   </Link>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <Link
-                        to={`/provider/workers/${worker.id}`}
-                        className="break-words text-lg font-semibold text-[#13334F] no-underline hover:text-[#53B59F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] sm:text-xl"
-                      >
-                        {worker.name}
-                      </Link>
-                      {worker.status === 'preferred' ? (
-                        <StatusBadge variant="preferred">Preferred</StatusBadge>
-                      ) : null}
-                    </div>
-                    <div className="text-[#607583]">{worker.role}</div>
-                    <div className="mt-2 flex flex-wrap items-center gap-4 text-sm">
-                      <div className="flex items-center gap-1">
-                        <Star className="h-4 w-4 text-[#53B59F]" />
-                        <span className="font-medium text-[#13334F]">{worker.score}</span>
-                        <span className="text-[#607583]">Covre Score</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-[#607583]">
-                        <MapPin className="h-4 w-4" />
-                        {worker.distance}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="shrink-0 text-left sm:text-right">
-                  <div className="text-3xl font-semibold text-[#53B59F]">{worker.score}</div>
-                  <div className="text-xs text-[#607583]">Match Score</div>
+                  <button
+                    type="button"
+                    disabled={benchByWorker[worker.id] || isPending(`bench-${worker.id}`)}
+                    onClick={async e => {
+                      e.stopPropagation();
+                      const r = await run(`bench-${worker.id}`, () => addWorkerToBench(worker.id));
+                      if (r.ok) {
+                        toast.success(r.data.message);
+                        setBenchByWorker(prev => ({ ...prev, [worker.id]: true }));
+                      } else toast.error(r.error.message);
+                    }}
+                    className="w-full rounded-lg border border-[#DDE7E8] bg-white px-6 py-3 font-medium text-[#13334F] transition-colors hover:bg-[#F7FAFA] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
+                  >
+                    {benchByWorker[worker.id]
+                      ? isSupabaseSimulated
+                        ? 'Simulated bench'
+                        : 'Added'
+                      : 'Add to Bench'}
+                  </button>
                 </div>
               </div>
-
-              <div className="mb-4 grid grid-cols-1 gap-3 rounded-lg bg-[#F7FAFA] p-4 sm:grid-cols-3">
-                <div>
-                  <div className="mb-1 flex items-center gap-1 text-[#607583]">
-                    <TrendingUp className="h-4 w-4" />
-                    <span className="text-xs">On-Time Rate</span>
-                  </div>
-                  <div className="text-lg font-semibold text-[#13334F]">{worker.onTime}%</div>
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center gap-1 text-[#607583]">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span className="text-xs">Prior Shifts Here</span>
-                  </div>
-                  <div className="text-lg font-semibold text-[#13334F]">{worker.priorShifts}</div>
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center gap-1 text-[#607583]">
-                    <Shield className="h-4 w-4" />
-                    <span className="text-xs">Credentials</span>
-                  </div>
-                  <div className="text-lg font-semibold text-[#13334F]">{worker.credentials.length}</div>
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <div className="mb-2 text-sm font-medium text-[#13334F]">Verified Credentials</div>
-                <div className="flex flex-wrap gap-2">
-                  {worker.credentials.map(cred => (
-                    <span
-                      key={cred}
-                      className="flex items-center gap-1 rounded-full bg-[#E6F6F2] px-3 py-1 text-xs font-medium text-[#257665]"
-                    >
-                      <Shield className="h-3 w-3" />
-                      {cred}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <button
-                  type="button"
-                  disabled={bookedByWorker[worker.id] || isPending(`book-${worker.id}`)}
-                  onClick={async e => {
-                    e.stopPropagation();
-                    const r = await run(`book-${worker.id}`, () =>
-                      bookWorkerForShift(worker.id, shift.id),
-                    );
-                    if (r.ok) {
-                      toast.success(r.data.message);
-                      setBookedByWorker(prev => ({ ...prev, [worker.id]: true }));
-                    } else toast.error(r.error.message);
-                  }}
-                  className="w-full rounded-lg bg-[#53B59F] px-6 py-3 font-medium text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
-                >
-                  {bookedByWorker[worker.id]
-                    ? isSupabaseSimulated
-                      ? 'Simulated booking'
-                      : 'Booked'
-                    : 'Book Worker'}
-                </button>
-                <Link
-                  to={`/provider/workers/${worker.id}`}
-                  className="flex w-full items-center justify-center rounded-lg bg-[#E8EEF2] px-6 py-3 text-center font-medium text-[#13334F] no-underline transition-colors hover:bg-[#DDE7E8] sm:flex-1"
-                >
-                  View Profile
-                </Link>
-                <button
-                  type="button"
-                  disabled={benchByWorker[worker.id] || isPending(`bench-${worker.id}`)}
-                  onClick={async e => {
-                    e.stopPropagation();
-                    const r = await run(`bench-${worker.id}`, () => addWorkerToBench(worker.id));
-                    if (r.ok) {
-                      toast.success(r.data.message);
-                      setBenchByWorker(prev => ({ ...prev, [worker.id]: true }));
-                    } else toast.error(r.error.message);
-                  }}
-                  className="w-full rounded-lg border border-[#DDE7E8] bg-white px-6 py-3 font-medium text-[#13334F] transition-colors hover:bg-[#F7FAFA] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
-                >
-                  {benchByWorker[worker.id]
-                    ? isSupabaseSimulated
-                      ? 'Simulated bench'
-                      : 'Added'
-                    : 'Add to Bench'}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
