@@ -205,7 +205,7 @@ export async function listProviderShiftApplicantsFromSupabase(
       )
     }
 
-    const applicants = ((rows ?? []) as ShiftRequestRow[]).map(rowToApplicant)
+    const applicants = ((rows ?? []) as unknown as ShiftRequestRow[]).map(rowToApplicant)
 
     return ok({
       shiftId,
@@ -286,7 +286,7 @@ export async function listProviderShiftApplicantReviewFromSupabase(
       )
     }
 
-    const requestRows = (requestRes.data ?? []) as ShiftRequestRow[]
+    const requestRows = (requestRes.data ?? []) as unknown as ShiftRequestRow[]
     const invitationRows = (invitationRes.data ?? []) as InvitationRow[]
     const requestByWorker = new Map(requestRows.map(row => [row.worker_id, row]))
     const invitationByWorker = new Map(invitationRows.map(row => [row.worker_id, row]))
