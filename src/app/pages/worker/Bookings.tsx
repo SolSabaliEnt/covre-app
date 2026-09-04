@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { CalendarPlus, Repeat2 } from 'lucide-react';
+import { CalendarPlus, Heart, Repeat2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { addShiftToCalendar, listWorkerBookings } from '../../services';
+import {
+  addShiftToCalendar,
+  listWorkerBookings,
+  saveWorkerSiteReturnPreference,
+} from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { useWorkerAction } from '../../hooks/useWorkerAction';
 import { StatusBadge } from '../../components/StatusBadge';
@@ -52,6 +56,9 @@ function BookingCard({
   showActiveShift,
   supabaseMode,
   workedHereCount,
+  returnPreferenceSaved,
+  returnPreferencePending,
+  onSaveReturnPreference,
 }: {
   shift: Shift;
   statusDisplay: string;
@@ -62,6 +69,9 @@ function BookingCard({
   showActiveShift: boolean;
   supabaseMode: boolean;
   workedHereCount?: number;
+  returnPreferenceSaved?: boolean;
+  returnPreferencePending?: boolean;
+  onSaveReturnPreference?: () => void;
 }) {
   const payLabel = acceptedPayRateLabel(
     supabaseMode,
@@ -104,6 +114,33 @@ function BookingCard({
         </div>
       ) : null}
 
+      {!isUpcoming ? (
+        <div className="mt-4 rounded-xl border border-[#DDE7E8] bg-[#F7FAFA] p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#607583]">
+            Your preference
+          </p>
+          <p className="mt-1 text-sm text-[#13334F]">
+            Would you be open to working at {shift.siteName} again?
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#607583]">
+            This stays private. Covre can use it to remember places you would return to; it is not shown as a public rating or mutual-match status.
+          </p>
+          <button
+            type="button"
+            disabled={supabaseMode || returnPreferenceSaved || returnPreferencePending}
+            onClick={onSaveReturnPreference}
+            className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#BFDCD5] bg-white px-3 py-2 text-sm font-semibold text-[#257665] transition-colors hover:bg-[#E6F6F2] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Heart className="h-4 w-4" aria-hidden />
+            {supabaseMode
+              ? 'Return preference coming soon'
+              : returnPreferenceSaved
+                ? 'Saved: I’d work here again'
+                : 'I’d work here again'}
+          </button>
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Link
           to={`/worker/shift/${shift.id}`}
@@ -138,9 +175,9 @@ export default function WorkerBookings() {
   const { data, error, loading, reload } = useAsyncResource(() => listWorkerBookings(), []);
   const { run, isPending } = useWorkerAction();
   const [calendarAddedByShift, setCalendarAddedByShift] = useState<Record<string, boolean>>({});
+  const [returnPreferenceBySite, setReturnPreferenceBySite] = useState<Record<string, boolean>>({});
 
-  const isEmpty =
-    data && data.upcoming.length === 0 && data.completed.length === 0;
+  const isEmpty = data && data.upcoming.length === 0 && data.completed.length === 0;
   const continuity = useMemo(() => buildWorkerContinuity(data), [data]);
   const recognition = useMemo(
     () => buildWorkerContinuityRecognition(continuity),
@@ -186,9 +223,7 @@ export default function WorkerBookings() {
 
         {!loading && !error && isEmpty && (
           <div className="rounded-2xl border border-[#DDE7E8] bg-white p-8 text-center shadow-sm">
-            <p className="text-sm text-[#607583]">
-              No bookings yet. Apply for open shifts to get started.
-            </p>
+            <p className="text-sm text-[#607583]">No bookings yet. Apply for open shifts to get started.</p>
             <Link
               to="/worker/shifts"
               className="mt-4 inline-flex text-sm font-semibold text-[#53B59F] hover:underline"
@@ -201,9 +236,7 @@ export default function WorkerBookings() {
         {!loading && !error && data && !isEmpty && (
           <>
             <section>
-              <h2 className="mb-3 px-1 text-sm font-semibold uppercase tracking-wide text-[#607583]">
-                Upcoming
-              </h2>
+              <h2 className="mb-3 px-1 text-sm font-semibold uppercase tracking-wide text-[#607583]">Upcoming</h2>
               {data.upcoming.length === 0 ? (
                 <p className="px-1 text-sm text-[#607583]">No upcoming bookings yet.</p>
               ) : (
@@ -233,9 +266,7 @@ export default function WorkerBookings() {
             </section>
 
             <section>
-              <h2 className="mb-3 px-1 text-sm font-semibold uppercase tracking-wide text-[#607583]">
-                Completed
-              </h2>
+              <h2 className="mb-3 px-1 text-sm font-semibold uppercase tracking-wide text-[#607583]">Completed</h2>
               {data.completed.length === 0 ? (
                 <p className="px-1 text-sm text-[#607583]">No completed shifts listed.</p>
               ) : (
@@ -249,6 +280,17 @@ export default function WorkerBookings() {
                       supabaseMode={supabaseMode}
                       showActiveShift={false}
                       workedHereCount={getSiteContinuity(continuity, shift.siteId)?.completedShifts}
+                      returnPreferenceSaved={Boolean(returnPreferenceBySite[shift.siteId])}
+                      returnPreferencePending={isPending(`return-${shift.siteId}`)}
+                      onSaveReturnPreference={async () => {
+                        const r = await run(`return-${shift.siteId}`, () =>
+                          saveWorkerSiteReturnPreference(shift.siteId),
+                        );
+                        if (r.ok) {
+                          toast.success(r.data.message);
+                          setReturnPreferenceBySite(prev => ({ ...prev, [shift.siteId]: true }));
+                        } else toast.error(r.error.message);
+                      }}
                       calendarAdded={!!calendarAddedByShift[shift.id]}
                       calendarPending={isPending(`cal-${shift.id}`)}
                       onAddToCalendar={async () => {
