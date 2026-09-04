@@ -9,6 +9,7 @@ import {
   listCurrentWorkerProviderContinuityFromSupabase,
   listCurrentWorkerSiteContinuityFromSupabase,
   listProviderWorkerContinuityFromSupabase,
+  listProviderWorkerSiteContinuityFromSupabase,
   type WorkerProviderContinuityReadModel,
 } from '../repositories/continuityRepository';
 import { getCurrentProviderOrganizationFromSupabase } from '../repositories/providerOrganizationRepository';
@@ -28,6 +29,16 @@ export type ProviderWorkerContinuity = {
   workerId: string;
   approvedShiftCount: number;
   distinctSiteCount: number;
+  firstWorkedLabel?: string;
+  lastWorkedLabel?: string;
+  isRepeat: boolean;
+};
+
+export type ProviderWorkerSiteContinuity = {
+  workerId: string;
+  siteId: string;
+  siteName: string;
+  approvedShiftCount: number;
   firstWorkedLabel?: string;
   lastWorkedLabel?: string;
   isRepeat: boolean;
@@ -165,6 +176,34 @@ export async function listCurrentProviderWorkerContinuity(): Promise<
       workerId: row.workerId,
       approvedShiftCount: row.approvedShiftCount,
       distinctSiteCount: row.distinctSiteCount,
+      firstWorkedLabel: formatWorkedLabel(row.firstWorkedAt),
+      lastWorkedLabel: formatWorkedLabel(row.lastWorkedAt),
+      isRepeat: row.isRepeat,
+    })),
+  );
+}
+
+export async function listCurrentProviderWorkerSiteContinuity(
+  siteId: string,
+): Promise<ApiResult<ProviderWorkerSiteContinuity[]>> {
+  if (getBackendMode() !== 'supabase') return ok([]);
+
+  const organization = await getCurrentProviderOrganizationFromSupabase();
+  if (!organization.ok) return organization;
+  if (!organization.data) return ok([]);
+
+  const rows = await listProviderWorkerSiteContinuityFromSupabase(
+    organization.data.providerId,
+    siteId,
+  );
+  if (!rows.ok) return rows;
+
+  return ok(
+    rows.data.map(row => ({
+      workerId: row.workerId,
+      siteId: row.siteId,
+      siteName: row.siteName,
+      approvedShiftCount: row.approvedShiftCount,
       firstWorkedLabel: formatWorkedLabel(row.firstWorkedAt),
       lastWorkedLabel: formatWorkedLabel(row.lastWorkedAt),
       isRepeat: row.isRepeat,
