@@ -5,7 +5,7 @@ import { LANDING_LOGO_SRC } from '../../lib/brand';
 export default function Splash() {
   const navigate = useNavigate();
   const location = useLocation();
-  const isAdminPreview = location.pathname.startsWith('/admin/full-app/worker/');
+  const isAdminPreview = new URLSearchParams(location.search).get('adminPreview') === '1';
 
   useEffect(() => {
     if (isAdminPreview) return;
@@ -16,11 +16,7 @@ export default function Splash() {
   }, [isAdminPreview, navigate]);
 
   return (
-    <div
-      className={`flex w-full max-w-full flex-col items-center justify-center overflow-x-hidden bg-[#0B243A] px-6 py-10 text-white ${
-        isAdminPreview ? 'h-full min-h-full' : 'min-h-[100svh] pb-[max(1.5rem,env(safe-area-inset-bottom))]'
-      }`}
-    >
+    <div className="flex min-h-[100svh] w-full max-w-full flex-col items-center justify-center overflow-x-hidden bg-[#0B243A] px-6 py-10 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-white">
       <img
         src={LANDING_LOGO_SRC}
         alt="Covre — Care staffing. Covered."
