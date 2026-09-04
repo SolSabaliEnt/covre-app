@@ -1,6 +1,10 @@
 import type { ApiResult } from '../api/types';
 import { mockRequest } from '../api/mockApi';
 import { getBackendMode } from '../lib/backendMode';
+import {
+  listWorkerSiteReturnPreferencesFromSupabase,
+  saveWorkerSiteReturnPreferenceToSupabase,
+} from '../repositories/workerContinuityPreferenceRepository';
 import type { WorkerActionResult } from './types';
 import { trackContinuityEvent } from './continuityTelemetryService';
 
@@ -38,14 +42,12 @@ function writeMockPreferences(siteIds: string[]): void {
 }
 
 /**
- * Private worker-side continuity signal. This is intentionally not exposed to providers as a
- * mutual-match state until a real persistence model and permissions are deployed.
+ * Private worker-side continuity signal. Providers do not receive this preference through this
+ * service. In Supabase mode, row-level security keeps reads/writes scoped to the signed-in worker.
  */
 export async function listWorkerSiteReturnPreferences(): Promise<ApiResult<string[]>> {
   if (getBackendMode() === 'supabase') {
-    // No Supabase persistence contract exists yet. Returning an empty list keeps the signal private
-    // and prevents the UI from implying that a preference was saved when it was not.
-    return { ok: true, data: [] };
+    return listWorkerSiteReturnPreferencesFromSupabase();
   }
 
   return mockRequest(() => readMockPreferences());
@@ -63,13 +65,15 @@ export async function saveWorkerSiteReturnPreference(
   }
 
   if (getBackendMode() === 'supabase') {
-    return {
-      ok: false,
-      error: {
-        code: 'return_preference_not_persisted',
-        message: 'Return preferences are not saved to Supabase yet.',
-      },
-    };
+    const result = await saveWorkerSiteReturnPreferenceToSupabase(trimmed);
+    if (result.ok) {
+      trackContinuityEvent('worker_return_preference_saved', {
+        actor: 'worker',
+        siteId: trimmed,
+        source: 'completed_booking_supabase',
+      });
+    }
+    return result;
   }
 
   return mockRequest(() => {
