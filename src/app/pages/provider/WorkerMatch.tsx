@@ -69,8 +69,8 @@ function SimulatedNotice({ page }: { page: ProviderWorkerMatchPage }) {
       className="rounded-xl border border-[#DDE7E8] bg-[#F7FAFA] px-4 py-3 text-sm leading-relaxed text-[#607583]"
       role="status"
     >
-      Candidate recommendations and bench actions are simulated. Real worker applications and
-      booking accept live on shift detail — use Applications there, not Book Worker here.
+      Candidate recommendations and booking actions are simulated here. Real worker applications and
+      booking acceptance live on shift detail; continuity language in this preview does not bypass that boundary.
     </div>
   );
 }
@@ -180,6 +180,7 @@ export default function WorkerMatch() {
         <div className="space-y-4">
           {candidates.map(worker => {
             const priorShiftsHere = siteHistoryByWorker?.[worker.id] ?? 0;
+            const isFamiliarHere = priorShiftsHere > 0;
             return (
               <div
                 key={worker.id}
@@ -208,7 +209,7 @@ export default function WorkerMatch() {
                         {worker.status === 'preferred' ? (
                           <StatusBadge variant="preferred">Preferred</StatusBadge>
                         ) : null}
-                        {priorShiftsHere > 0 ? (
+                        {isFamiliarHere ? (
                           <StatusBadge variant="verified">Familiar here</StatusBadge>
                         ) : null}
                       </div>
@@ -258,15 +259,15 @@ export default function WorkerMatch() {
 
                 <div
                   className={`mb-4 flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm ${
-                    priorShiftsHere > 0
+                    isFamiliarHere
                       ? 'border border-[#BFDCD5] bg-[#E6F6F2] text-[#257665]'
                       : 'border border-[#DDE7E8] bg-[#F7FAFA] text-[#607583]'
                   }`}
                 >
                   <Repeat2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                   <span>
-                    {priorShiftsHere > 0
-                      ? `You have worked with ${worker.name} at ${shift.siteName} ${priorShiftsHere} ${priorShiftsHere === 1 ? 'time' : 'times'} before.`
+                    {isFamiliarHere
+                      ? `You have worked with ${worker.name} at ${shift.siteName} ${priorShiftsHere} ${priorShiftsHere === 1 ? 'time' : 'times'} before. Covre treats this as a return relationship.`
                       : `New relationship at ${shift.siteName}. No completed shifts together here yet.`}
                   </span>
                 </div>
@@ -286,6 +287,9 @@ export default function WorkerMatch() {
                   </div>
                 </div>
 
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#607583]">
+                  {isFamiliarHere ? 'Continue this relationship' : 'Start this relationship'}
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <button
                     type="button"
@@ -305,14 +309,18 @@ export default function WorkerMatch() {
                     {bookedByWorker[worker.id]
                       ? isSupabaseSimulated
                         ? 'Simulated booking'
-                        : 'Booked'
-                      : 'Book Worker'}
+                        : isFamiliarHere
+                          ? 'Booked again'
+                          : 'Booked'
+                      : isFamiliarHere
+                        ? 'Book Again'
+                        : 'Book Worker'}
                   </button>
                   <Link
                     to={`/provider/workers/${worker.id}`}
                     className="flex w-full items-center justify-center rounded-lg bg-[#E8EEF2] px-6 py-3 text-center font-medium text-[#13334F] no-underline transition-colors hover:bg-[#DDE7E8] sm:flex-1"
                   >
-                    View Profile
+                    {isFamiliarHere ? 'View Shared History' : 'View Profile'}
                   </Link>
                   <button
                     type="button"
