@@ -8,6 +8,7 @@ import {
   bookWorkerForShift,
   getProviderWorkerMatchPage,
   getProviderWorkerProfile,
+  listCurrentProviderWorkerSiteContinuity,
   trackContinuityEvent,
 } from '../../services';
 import type { ProviderWorkerMatchPage } from '../../services/types';
@@ -67,7 +68,7 @@ function SimulatedNotice({ page }: { page: ProviderWorkerMatchPage }) {
       className="rounded-xl border border-[#DDE7E8] bg-[#F7FAFA] px-4 py-3 text-sm leading-relaxed text-[#607583]"
       role="status"
     >
-      Candidate recommendations and booking actions are simulated here. Real worker applications and booking acceptance live on shift detail; continuity language in this preview does not bypass that boundary.
+      Candidate recommendations and booking actions are simulated here. Prior-site counts, when available, come from approved work history; real applications and booking acceptance still live on shift detail.
     </div>
   );
 }
@@ -92,6 +93,17 @@ export default function WorkerMatch() {
   const { data: siteHistoryByWorker } = useAsyncResource(async () => {
     if (!page) return { ok: true as const, data: {} as Record<string, number> };
 
+    if (page.source === 'supabase_shift_mock_candidates') {
+      const result = await listCurrentProviderWorkerSiteContinuity(page.shift.siteId);
+      if (!result.ok) return result;
+      return {
+        ok: true as const,
+        data: Object.fromEntries(
+          result.data.map(row => [row.workerId, row.approvedShiftCount]),
+        ) as Record<string, number>,
+      };
+    }
+
     const entries = await Promise.all(
       page.candidates.map(async worker => {
         const result = await getProviderWorkerProfile(worker.id);
@@ -102,7 +114,7 @@ export default function WorkerMatch() {
     );
 
     return { ok: true as const, data: Object.fromEntries(entries) as Record<string, number> };
-  }, [page?.shift.id]);
+  }, [page?.shift.id, page?.source]);
 
   const isSupabaseSimulated = page?.source === 'supabase_shift_mock_candidates';
 
@@ -165,7 +177,7 @@ export default function WorkerMatch() {
           <div className="font-semibold text-[#13334F]">{candidates.length} qualified workers available</div>
           <div className="text-sm text-[#607583]">
             {isSupabaseSimulated
-              ? 'Demo workers shown for layout review; matching is not connected yet.'
+              ? 'Demo workers remain for layout review; any matching worker IDs use canonical approved-work familiarity.'
               : 'Credential fit and prior site history are shown together.'}
           </div>
         </div>
@@ -197,10 +209,7 @@ export default function WorkerMatch() {
                       className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#53B59F] text-xl font-semibold text-white no-underline transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] sm:h-16 sm:w-16"
                       aria-label={`Open profile for ${worker.name}`}
                     >
-                      {worker.name
-                        .split(' ')
-                        .map(n => n[0])
-                        .join('')}
+                      {worker.name.split(' ').map(n => n[0]).join('')}
                     </Link>
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -255,7 +264,7 @@ export default function WorkerMatch() {
                   <div>
                     <div className="mb-1 flex items-center gap-1 text-[#607583]">
                       <CheckCircle2 className="h-4 w-4" />
-                      <span className="text-xs">Worked Here</span>
+                      <span className="text-xs">Approved Here</span>
                     </div>
                     <div className="text-lg font-semibold text-[#13334F]">{priorShiftsHere}×</div>
                   </div>
@@ -278,8 +287,8 @@ export default function WorkerMatch() {
                   <Repeat2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                   <span>
                     {isFamiliarHere
-                      ? `You have worked with ${worker.name} at ${shift.siteName} ${priorShiftsHere} ${priorShiftsHere === 1 ? 'time' : 'times'} before. Covre treats this as a return relationship.`
-                      : `New relationship at ${shift.siteName}. No completed shifts together here yet.`}
+                      ? `${worker.name} has ${priorShiftsHere} approved ${priorShiftsHere === 1 ? 'shift' : 'shifts'} at ${shift.siteName}. Covre treats this as a return relationship.`
+                      : `No approved work history together at ${shift.siteName} yet.`}
                   </span>
                 </div>
 
