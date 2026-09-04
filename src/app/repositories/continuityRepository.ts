@@ -87,6 +87,32 @@ async function resolveCurrentWorkerId(
   return ok((data as { id: string } | null)?.id ?? null);
 }
 
+function mapSiteRow(row: SiteRow): WorkerSiteContinuityReadModel {
+  return {
+    workerId: row.worker_id,
+    siteId: row.site_id,
+    providerId: row.provider_id,
+    siteName: row.site_name,
+    approvedShiftCount: row.approved_shift_count,
+    firstWorkedAt: row.first_worked_at,
+    lastWorkedAt: row.last_worked_at,
+    isRepeat: row.is_repeat,
+  };
+}
+
+function mapProviderRow(row: ProviderRow): WorkerProviderContinuityReadModel {
+  return {
+    workerId: row.worker_id,
+    providerId: row.provider_id,
+    providerName: row.provider_name,
+    approvedShiftCount: row.approved_shift_count,
+    distinctSiteCount: row.distinct_site_count,
+    firstWorkedAt: row.first_worked_at,
+    lastWorkedAt: row.last_worked_at,
+    isRepeat: row.is_repeat,
+  };
+}
+
 export async function listCurrentWorkerSiteContinuityFromSupabase(): Promise<
   ApiResult<WorkerSiteContinuityReadModel[]>
 > {
@@ -108,19 +134,7 @@ export async function listCurrentWorkerSiteContinuityFromSupabase(): Promise<
       .order('last_worked_at', { ascending: false });
 
     if (error) return fail('site_continuity_load', friendlyDbMessage(error, 'Unable to load site history.'));
-
-    return ok(
-      ((data ?? []) as SiteRow[]).map(row => ({
-        workerId: row.worker_id,
-        siteId: row.site_id,
-        providerId: row.provider_id,
-        siteName: row.site_name,
-        approvedShiftCount: row.approved_shift_count,
-        firstWorkedAt: row.first_worked_at,
-        lastWorkedAt: row.last_worked_at,
-        isRepeat: row.is_repeat,
-      })),
-    );
+    return ok(((data ?? []) as SiteRow[]).map(mapSiteRow));
   } catch (error) {
     return fail('unexpected', error instanceof Error ? error.message : 'Request failed.');
   }
@@ -147,19 +161,7 @@ export async function listCurrentWorkerProviderContinuityFromSupabase(): Promise
       .order('last_worked_at', { ascending: false });
 
     if (error) return fail('provider_continuity_load', friendlyDbMessage(error, 'Unable to load provider history.'));
-
-    return ok(
-      ((data ?? []) as ProviderRow[]).map(row => ({
-        workerId: row.worker_id,
-        providerId: row.provider_id,
-        providerName: row.provider_name,
-        approvedShiftCount: row.approved_shift_count,
-        distinctSiteCount: row.distinct_site_count,
-        firstWorkedAt: row.first_worked_at,
-        lastWorkedAt: row.last_worked_at,
-        isRepeat: row.is_repeat,
-      })),
-    );
+    return ok(((data ?? []) as ProviderRow[]).map(mapProviderRow));
   } catch (error) {
     return fail('unexpected', error instanceof Error ? error.message : 'Request failed.');
   }
@@ -185,19 +187,35 @@ export async function listProviderWorkerContinuityFromSupabase(
       .order('last_worked_at', { ascending: false });
 
     if (error) return fail('provider_worker_continuity_load', friendlyDbMessage(error, 'Unable to load repeat-worker history.'));
+    return ok(((data ?? []) as ProviderRow[]).map(mapProviderRow));
+  } catch (error) {
+    return fail('unexpected', error instanceof Error ? error.message : 'Request failed.');
+  }
+}
 
-    return ok(
-      ((data ?? []) as ProviderRow[]).map(row => ({
-        workerId: row.worker_id,
-        providerId: row.provider_id,
-        providerName: row.provider_name,
-        approvedShiftCount: row.approved_shift_count,
-        distinctSiteCount: row.distinct_site_count,
-        firstWorkedAt: row.first_worked_at,
-        lastWorkedAt: row.last_worked_at,
-        isRepeat: row.is_repeat,
-      })),
-    );
+export async function listProviderWorkerSiteContinuityFromSupabase(
+  providerId: string,
+  siteId: string,
+): Promise<ApiResult<WorkerSiteContinuityReadModel[]>> {
+  try {
+    const supabase = getSupabaseClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) return fail('not_authenticated', 'Sign in before loading site continuity.');
+
+    const { data, error } = await supabase
+      .from('worker_site_continuity_v1')
+      .select(
+        'worker_id, site_id, provider_id, site_name, approved_shift_count, first_worked_at, last_worked_at, is_repeat',
+      )
+      .eq('provider_id', providerId)
+      .eq('site_id', siteId)
+      .order('approved_shift_count', { ascending: false })
+      .order('last_worked_at', { ascending: false });
+
+    if (error) return fail('provider_site_continuity_load', friendlyDbMessage(error, 'Unable to load site familiarity.'));
+    return ok(((data ?? []) as SiteRow[]).map(mapSiteRow));
   } catch (error) {
     return fail('unexpected', error instanceof Error ? error.message : 'Request failed.');
   }
