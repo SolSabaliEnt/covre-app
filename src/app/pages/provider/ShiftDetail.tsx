@@ -41,7 +41,9 @@ function reviewBadge(applicant: ProviderShiftApplicantReview) {
     case 'invited':
       return { variant: 'preferred' as const, label: 'Invited · awaiting worker' };
     case 'booked':
-      return { variant: 'covered' as const, label: 'Booked' };
+      return { variant: 'covered' as const, label: 'Booked · coverage secured' };
+    case 'covered_elsewhere':
+      return { variant: 'new' as const, label: 'Closed · coverage secured' };
     case 'withdrawn':
       return { variant: 'new' as const, label: 'Withdrawn' };
     case 'declined':
@@ -63,6 +65,19 @@ function formatSubmittedAt(iso?: string): string | null {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function invitationResolutionLine(applicant: ProviderShiftApplicantReview): string | null {
+  const invitation = applicant.invitation;
+  if (!invitation) return null;
+  if (invitation.resolutionReason === 'booked') return ' · this invitation led to the booked coverage';
+  if (invitation.resolutionReason === 'shift_covered_elsewhere') {
+    return ' · worker accepted, but coverage was secured with someone else';
+  }
+  if (invitation.resolutionReason === 'shift_covered') return ' · closed automatically when coverage was secured';
+  if (invitation.status === 'accepted') return ' · worker explicitly accepted this invitation';
+  if (invitation.status === 'pending' || invitation.status === 'viewed') return ' · waiting for worker response';
+  return ` · ${invitation.status}`;
 }
 
 function ApplicationsSection({
@@ -106,7 +121,7 @@ function ApplicationsSection({
     <Section title="Applications & invitations">
       <p className="mb-4 text-sm leading-6 text-[#607583]">
         {hasBooked
-          ? 'Coverage is booked. Invitation history stays visible as context for how this worker entered the workflow.'
+          ? 'Coverage is secured. Covre closes competing pending applications and invitations while preserving the worker-response history.'
           : acceptedInvites > 0
             ? `${acceptedInvites} invited ${acceptedInvites === 1 ? 'worker has' : 'workers have'} accepted. Confirming below uses Covre’s existing booking transaction.`
             : 'Applications and provider invitations are shown together. An invitation is not a booking until the worker accepts and you confirm coverage.'}
@@ -125,6 +140,7 @@ function ApplicationsSection({
             const canConfirm =
               Boolean(applicant.requestId) &&
               !hasBooked &&
+              data?.canConfirmBookings !== false &&
               (applicant.reviewState === 'applied' || applicant.reviewState === 'invited_accepted');
             const pendingKey = applicant.requestId ? `accept-${applicant.requestId}` : '';
 
@@ -134,7 +150,9 @@ function ApplicationsSection({
                 className={`rounded-xl border p-4 ${
                   applicant.reviewState === 'invited_accepted'
                     ? 'border-[#BFDCD5] bg-[#E6F6F2]'
-                    : 'border-[#DDE7E8] bg-[#F7FAFA]'
+                    : applicant.reviewState === 'booked'
+                      ? 'border-[#BFDCD5] bg-white'
+                      : 'border-[#DDE7E8] bg-[#F7FAFA]'
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -155,12 +173,11 @@ function ApplicationsSection({
                     <p className="font-semibold text-[#13334F]">Provider invitation</p>
                     <p>
                       Sent {formatSubmittedAt(applicant.invitation.invitedAt) ?? 'earlier'}
-                      {applicant.invitation.status === 'accepted'
-                        ? ' · worker explicitly accepted this invitation'
-                        : applicant.invitation.status === 'pending' || applicant.invitation.status === 'viewed'
-                          ? ' · waiting for worker response'
-                          : ` · ${applicant.invitation.status}`}
+                      {invitationResolutionLine(applicant)}
                     </p>
+                    {applicant.invitation.resolvedAt ? (
+                      <p>Resolved {formatSubmittedAt(applicant.invitation.resolvedAt) ?? 'when coverage was secured'}</p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -202,14 +219,16 @@ function ApplicationsSection({
                     className="mt-3 w-full rounded-lg border border-[#DDE7E8] bg-white px-3 py-2 text-sm font-semibold text-[#607583] disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {effectiveApplicant.reviewState === 'booked'
-                      ? 'Booked'
-                      : effectiveApplicant.reviewState === 'invited'
-                        ? 'Waiting for worker'
-                        : effectiveApplicant.reviewState === 'declined'
-                          ? 'No action'
-                          : hasBooked
-                            ? 'Shift booked'
-                            : 'No booking action'}
+                      ? 'Coverage secured'
+                      : effectiveApplicant.reviewState === 'covered_elsewhere'
+                        ? 'Closed when shift was booked'
+                        : effectiveApplicant.reviewState === 'invited'
+                          ? 'Waiting for worker'
+                          : effectiveApplicant.reviewState === 'declined'
+                            ? 'No action'
+                            : hasBooked
+                              ? 'Shift booked'
+                              : 'No booking action'}
                   </button>
                 )}
               </li>
@@ -375,7 +394,7 @@ export default function ProviderShiftDetail() {
         <Section title="Assigned worker">
           {shift.lifecycleStatus === 'Booked' ? (
             <p className="text-sm text-[#607583]">
-              Coverage is assigned through the review section above. Invitation acceptance and provider booking confirmation remain separate audit steps.
+              Coverage is secured. Covre keeps invitation and application history as audit context while closing unresolved competing intent.
             </p>
           ) : shift.assignedWorkerId ? (
             <Link
