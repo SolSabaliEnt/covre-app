@@ -2,10 +2,33 @@ import type { ApiResult } from '../api/types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import type {
   ProviderWorkerCredential,
-  ProviderWorkerProfile,
   ProviderWorkerRecentShift,
   ProviderWorkerSiteFamiliarity,
 } from '../services/types';
+
+export type ProviderWorkerProfileView = {
+  id: string;
+  name: string;
+  roles: string[];
+  location: string;
+  initials: string;
+  isSupabaseBacked: boolean;
+  covreScore?: number;
+  isVerified?: boolean;
+  isPreferredBench?: boolean;
+  credentials: ProviderWorkerCredential[];
+  reliability: {
+    completedShifts: number;
+    onTimeRatePct?: number;
+    repeatRequests?: number;
+  };
+  siteFamiliarity: ProviderWorkerSiteFamiliarity[];
+  recentShifts: ProviderWorkerRecentShift[];
+  providerNotes?: string;
+  firstWorkedLabel?: string;
+  lastWorkedLabel?: string;
+  distinctSiteCount: number;
+};
 
 type WorkerProfileRow = {
   id: string;
@@ -114,10 +137,15 @@ function formatLocation(row: WorkerProfileRow): string {
   return [row.city?.trim(), row.state?.trim()].filter(Boolean).join(', ') || 'Location not shared';
 }
 
-function formatDateLabel(value: string): string {
+function formatDateLabel(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return undefined;
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatShiftDateLabel(value: string): string {
+  return formatDateLabel(value) ?? '—';
 }
 
 function formatTimeRange(startsAt: string, endsAt: string): string {
@@ -155,7 +183,7 @@ function mapRecentWork(rows: ApprovedWorkRow[]): ProviderWorkerRecentShift[] {
       shiftId: shift.id,
       siteName: site?.name?.trim() || 'Care site',
       roleTitle: shift.title?.trim() || shift.role?.trim() || 'Shift',
-      dateLabel: formatDateLabel(shift.starts_at),
+      dateLabel: formatShiftDateLabel(shift.starts_at),
       timeRange: formatTimeRange(shift.starts_at, shift.ends_at),
     });
   }
@@ -169,7 +197,7 @@ function mapRecentWork(rows: ApprovedWorkRow[]): ProviderWorkerRecentShift[] {
 export async function getProviderWorkerProfileFromSupabase(
   providerId: string,
   workerId: string,
-): Promise<ApiResult<ProviderWorkerProfile | null>> {
+): Promise<ApiResult<ProviderWorkerProfileView | null>> {
   try {
     if (!isUuid(workerId)) return ok(null);
 
@@ -273,10 +301,7 @@ export async function getProviderWorkerProfileFromSupabase(
     }));
 
     const roles = [...new Set(recentShifts.map(row => row.roleTitle).filter(Boolean))];
-    const name =
-      userProfile?.display_name?.trim() ||
-      worker.headline?.trim() ||
-      'Care worker';
+    const name = userProfile?.display_name?.trim() || worker.headline?.trim() || 'Care worker';
     const approvedShiftsTogether = providerContinuity?.approved_shift_count ?? 0;
 
     return ok({
@@ -285,19 +310,16 @@ export async function getProviderWorkerProfileFromSupabase(
       roles: roles.length > 0 ? roles : [worker.headline?.trim() || 'Care worker'],
       location: formatLocation(worker),
       initials: initialsFromName(name),
-      covreScore: 0,
-      isVerified: false,
-      isPreferredBench: false,
+      isSupabaseBacked: true,
       credentials,
       reliability: {
         completedShifts: approvedShiftsTogether,
-        onTimeRatePct: 0,
-        repeatRequests: 0,
       },
       siteFamiliarity,
       recentShifts,
-      providerNotes:
-        'Provider notes are not connected to the Supabase worker profile yet. Shared work history above is derived only from approved timesheets.',
+      firstWorkedLabel: formatDateLabel(providerContinuity?.first_worked_at),
+      lastWorkedLabel: formatDateLabel(providerContinuity?.last_worked_at),
+      distinctSiteCount: providerContinuity?.distinct_site_count ?? siteFamiliarity.length,
     });
   } catch (error) {
     return fail('unexpected', error instanceof Error ? error.message : 'Request failed.');
