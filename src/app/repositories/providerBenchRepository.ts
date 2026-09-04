@@ -1,6 +1,6 @@
 import type { ApiResult } from '../api/types';
 import { getSupabaseClient } from '../lib/supabaseClient';
-import type { ProviderBenchPayload, ProviderBenchWorker } from '../services/types';
+import type { ProviderBenchPayload, ProviderBenchSection, ProviderBenchWorker } from '../services/types';
 
 type ProviderMembership = { providerId: string };
 
@@ -211,7 +211,7 @@ export async function listProviderBenchFromSupabase(): Promise<ApiResult<Provide
       buildWorker(workerId, continuityByWorker.get(workerId), profilesById, namesByUserId),
     );
 
-    const sections = [];
+    const sections: ProviderBenchSection[] = [];
     if (explicitBenchWorkers.length > 0) {
       sections.push({ title: 'Saved to your Bench', workers: explicitBenchWorkers });
     }
