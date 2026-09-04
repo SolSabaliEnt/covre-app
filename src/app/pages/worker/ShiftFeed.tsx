@@ -10,6 +10,7 @@ import {
   listWorkerShifts,
   listWorkerSiteReturnPreferences,
   saveShift,
+  trackContinuityEvent,
 } from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { useWorkerAction } from '../../hooks/useWorkerAction';
@@ -130,6 +131,17 @@ export default function ShiftFeed() {
 
     return familiar[0];
   }, [shifts, continuity, preferredReturnSites]);
+
+  useEffect(() => {
+    if (!familiarOpportunity || viewMode !== 'list' || previouslyWorkedOnly) return;
+    trackContinuityEvent('worker_familiar_opportunity_impression', {
+      actor: 'worker',
+      shiftId: familiarOpportunity.shift.id,
+      siteId: familiarOpportunity.shift.siteId,
+      source: familiarOpportunity.workerWantsReturn ? 'private_return_preference' : 'work_history',
+      completedShiftsHere: familiarOpportunity.history.completedShifts,
+    });
+  }, [familiarOpportunity?.shift.id, viewMode, previouslyWorkedOnly]);
 
   const visibleShifts = useMemo(() => {
     const filtered = (shifts ?? []).filter(
@@ -274,6 +286,15 @@ export default function ShiftFeed() {
               </div>
               <Link
                 to={`/worker/shift/${familiarOpportunity.shift.id}`}
+                onClick={() =>
+                  trackContinuityEvent('worker_familiar_opportunity_open', {
+                    actor: 'worker',
+                    shiftId: familiarOpportunity.shift.id,
+                    siteId: familiarOpportunity.shift.siteId,
+                    source: familiarOpportunity.workerWantsReturn ? 'private_return_preference' : 'work_history',
+                    completedShiftsHere: familiarOpportunity.history.completedShifts,
+                  })
+                }
                 className="shrink-0 rounded-xl bg-[#13334F] px-4 py-2.5 text-sm font-semibold text-white no-underline hover:bg-[#0B243A]"
               >
                 View shift
