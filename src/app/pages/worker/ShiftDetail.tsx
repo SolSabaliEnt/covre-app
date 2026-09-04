@@ -1,7 +1,7 @@
 import type { CareSite, Shift } from '../../data/types';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Link, useNavigate, useParams } from 'react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   MapPin,
   Shield,
@@ -22,6 +22,7 @@ import {
   getWorkerShiftPage,
   listWorkerBookings,
   listWorkerShiftRequests,
+  trackContinuityEvent,
 } from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { useWorkerAction } from '../../hooks/useWorkerAction';
@@ -91,6 +92,7 @@ function ShiftDetailView({
 }) {
   const navigate = useNavigate();
   const { run, isPending } = useWorkerAction();
+  const familiarDetailTracked = useRef(false);
   const { data: requests } = useAsyncResource(
     () =>
       supabaseMode
@@ -109,6 +111,18 @@ function ShiftDetailView({
 
   const continuity = useMemo(() => buildWorkerContinuity(bookings), [bookings]);
   const siteHistory = getSiteContinuity(continuity, shift.siteId);
+
+  useEffect(() => {
+    if (!siteHistory || familiarDetailTracked.current) return;
+    familiarDetailTracked.current = true;
+    trackContinuityEvent('worker_familiar_shift_detail_view', {
+      actor: 'worker',
+      shiftId,
+      siteId: shift.siteId,
+      source: 'shift_detail',
+      completedShiftsHere: siteHistory.completedShifts,
+    });
+  }, [shift.siteId, shiftId, siteHistory]);
 
   const alreadyApplied = useMemo(
     () =>
@@ -377,6 +391,15 @@ function ShiftDetailView({
               const r = await run(`claim-${shiftId}`, () => claimShift(shiftId));
               if (r.ok) {
                 toast.success(r.data.message);
+                if (siteHistory) {
+                  trackContinuityEvent('worker_familiar_shift_application', {
+                    actor: 'worker',
+                    shiftId,
+                    siteId: shift.siteId,
+                    source: supabaseMode ? 'application' : 'claim',
+                    completedShiftsHere: siteHistory.completedShifts,
+                  });
+                }
                 if (supabaseMode) {
                   setApplied(true);
                   if (r.data.message === 'Application sent') setShowApplicationSent(true);
