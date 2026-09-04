@@ -16,6 +16,16 @@ export type WorkerContinuitySummary = {
   sites: Record<string, WorkerSiteContinuity>;
 };
 
+export type WorkerContinuityRecognition = {
+  eyebrow: string;
+  headline: string;
+  detail: string;
+  primaryValue: number;
+  primaryLabel: string;
+  secondaryValue?: number;
+  secondaryLabel?: string;
+};
+
 function shouldCountInContinuity(statusDisplay: string): boolean {
   const status = statusDisplay.trim().toLowerCase();
   return !(
@@ -72,6 +82,52 @@ export function buildWorkerContinuity(
     repeatSiteCount: siteRows.filter(row => row.completedShifts > 1).length,
     mostWorkedSite,
     sites,
+  };
+}
+
+/**
+ * Quiet recognition of accumulated work. This deliberately avoids points, streaks, levels, and
+ * invented praise. Copy changes only when the underlying work history supports it.
+ */
+export function buildWorkerContinuityRecognition(
+  summary: WorkerContinuitySummary,
+): WorkerContinuityRecognition | undefined {
+  if (summary.totalCompletedShifts === 0) return undefined;
+
+  const strongest = summary.mostWorkedSite;
+
+  if (strongest && strongest.completedShifts >= 5) {
+    return {
+      eyebrow: 'Your work is adding up',
+      headline: `${strongest.siteName} has become one of your regular places.`,
+      detail: `You have completed ${strongest.completedShifts} shifts there. Covre keeps that familiarity visible instead of resetting you to zero each time.`,
+      primaryValue: summary.totalCompletedShifts,
+      primaryLabel: 'completed shifts',
+      secondaryValue: summary.repeatSiteCount,
+      secondaryLabel: 'places returned to',
+    };
+  }
+
+  if (summary.repeatSiteCount > 0) {
+    return {
+      eyebrow: 'Your work is adding up',
+      headline: 'You are building places you know.',
+      detail: `You have returned to ${summary.repeatSiteCount} ${summary.repeatSiteCount === 1 ? 'care site' : 'care sites'}. That repeat history stays attached to your Covre experience.`,
+      primaryValue: summary.totalCompletedShifts,
+      primaryLabel: 'completed shifts',
+      secondaryValue: summary.repeatSiteCount,
+      secondaryLabel: 'places returned to',
+    };
+  }
+
+  return {
+    eyebrow: 'Your Covre history',
+    headline: 'Your work history has started here.',
+    detail: `You have ${summary.totalCompletedShifts} completed ${summary.totalCompletedShifts === 1 ? 'shift' : 'shifts'} on Covre. As you return to places, that familiarity will stay visible.`,
+    primaryValue: summary.totalCompletedShifts,
+    primaryLabel: 'completed shifts',
+    secondaryValue: summary.familiarSiteCount,
+    secondaryLabel: summary.familiarSiteCount === 1 ? 'place known' : 'places known',
   };
 }
 
