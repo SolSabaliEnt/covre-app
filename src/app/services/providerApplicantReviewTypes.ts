@@ -6,6 +6,7 @@ export type ProviderApplicantReviewState =
   | 'invited'
   | 'invited_accepted'
   | 'booked'
+  | 'covered_elsewhere'
   | 'withdrawn'
   | 'declined';
 
@@ -14,6 +15,8 @@ export type ProviderApplicantInvitationContext = {
   status: ProviderShiftInvitationStatus;
   invitedAt: string;
   updatedAt?: string;
+  resolvedAt?: string;
+  resolutionReason?: 'booked' | 'shift_covered' | 'shift_covered_elsewhere' | string;
 };
 
 export type ProviderShiftApplicantReview = {
