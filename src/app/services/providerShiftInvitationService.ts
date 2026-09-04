@@ -6,11 +6,55 @@ import {
   createProviderShiftInvitationInSupabase,
   listCurrentWorkerShiftInvitationsFromSupabase,
   listProviderInvitableShiftsFromSupabase,
+  respondToWorkerShiftInvitationInSupabase,
   type ProviderInvitableShift,
   type ProviderShiftInvitation,
+  type WorkerShiftInvitation,
+  type WorkerShiftInvitationDecision,
+  type WorkerShiftInvitationResponse,
 } from '../repositories/providerShiftInvitationsRepository';
 
-const mockInvitations: ProviderShiftInvitation[] = [];
+const MOCK_STORAGE_KEY = 'covre.provider-shift-invitations.v1';
+const mockFallback: WorkerShiftInvitation[] = [];
+
+function readMockInvitations(): WorkerShiftInvitation[] {
+  if (typeof window === 'undefined') return [...mockFallback];
+  try {
+    const raw = window.localStorage.getItem(MOCK_STORAGE_KEY);
+    if (!raw) return [...mockFallback];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as WorkerShiftInvitation[]) : [...mockFallback];
+  } catch {
+    return [...mockFallback];
+  }
+}
+
+function writeMockInvitations(invitations: WorkerShiftInvitation[]): void {
+  mockFallback.splice(0, mockFallback.length, ...invitations);
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(invitations));
+  } catch {
+    // In-memory fallback keeps demo interaction usable when storage is unavailable.
+  }
+}
+
+function mockShiftInvitation(workerId: string, shiftId: string): WorkerShiftInvitation {
+  const shift = shifts.find(row => row.id === shiftId);
+  return {
+    id: `invite-${Date.now()}-${workerId}`,
+    providerId: shift?.providerOrgId ?? 'prov-001',
+    shiftId,
+    workerId,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    shiftTitle: shift?.roleTitle ?? 'Open shift',
+    role: shift?.workRole ?? 'Caregiver',
+    siteName: shift?.siteName ?? 'Care site',
+    startsAt: shift?.dateLabel ?? '',
+    endsAt: shift?.timeRange ?? '',
+  };
+}
 
 export async function listProviderInvitableShifts(): Promise<ApiResult<ProviderInvitableShift[]>> {
   if (getBackendMode() === 'supabase') {
@@ -44,28 +88,59 @@ export async function inviteWorkerToOpenShift(
   }
 
   return mockRequest(() => {
-    const existing = mockInvitations.find(
+    const invitations = readMockInvitations();
+    const existing = invitations.find(
       invitation => invitation.workerId === workerId && invitation.shiftId === shiftId,
     );
     if (existing) return existing;
 
-    const invitation: ProviderShiftInvitation = {
-      id: `invite-${Date.now()}-${workerId}`,
-      providerId: 'prov-001',
-      shiftId,
-      workerId,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    };
-    mockInvitations.unshift(invitation);
+    const invitation = mockShiftInvitation(workerId, shiftId);
+    writeMockInvitations([invitation, ...invitations]);
     return invitation;
   });
 }
 
-export async function listWorkerShiftInvitations(): Promise<ApiResult<ProviderShiftInvitation[]>> {
+export async function listWorkerShiftInvitations(): Promise<ApiResult<WorkerShiftInvitation[]>> {
   if (getBackendMode() === 'supabase') {
     return listCurrentWorkerShiftInvitationsFromSupabase();
   }
 
-  return mockRequest(() => [...mockInvitations]);
+  return mockRequest(() =>
+    readMockInvitations().filter(
+      invitation => invitation.status === 'pending' || invitation.status === 'viewed',
+    ),
+  );
+}
+
+export async function respondToWorkerShiftInvitation(
+  invitationId: string,
+  decision: WorkerShiftInvitationDecision,
+): Promise<ApiResult<WorkerShiftInvitationResponse>> {
+  if (!invitationId.trim()) {
+    return { ok: false, error: { code: 'validation', message: 'Invitation is required.' } };
+  }
+
+  if (getBackendMode() === 'supabase') {
+    return respondToWorkerShiftInvitationInSupabase(invitationId, decision);
+  }
+
+  return mockRequest(() => {
+    const invitations = readMockInvitations();
+    const invitation = invitations.find(row => row.id === invitationId);
+    if (!invitation) {
+      throw new Error('Invitation not found.');
+    }
+
+    invitation.status = decision;
+    writeMockInvitations(invitations);
+
+    return {
+      invitationId: invitation.id,
+      shiftId: invitation.shiftId,
+      workerId: invitation.workerId,
+      status: decision,
+      requestId: decision === 'accepted' ? `request-${invitation.id}` : undefined,
+      bookingReady: decision === 'accepted',
+    };
+  });
 }
