@@ -2,6 +2,7 @@ import type { ApiResult } from '../api/types';
 import { mockRequest } from '../api/mockApi';
 import { getBackendMode } from '../lib/backendMode';
 import type { WorkerActionResult } from './types';
+import { trackContinuityEvent } from './continuityTelemetryService';
 
 const MOCK_RETURN_PREFERENCE_STORAGE_KEY = 'covre.worker.site-return-preferences.v1';
 const memoryFallback = new Set<string>();
@@ -75,6 +76,11 @@ export async function saveWorkerSiteReturnPreference(
     const next = new Set(readMockPreferences());
     next.add(trimmed);
     writeMockPreferences([...next]);
+    trackContinuityEvent('worker_return_preference_saved', {
+      actor: 'worker',
+      siteId: trimmed,
+      source: 'completed_booking',
+    });
 
     return {
       id: trimmed,
