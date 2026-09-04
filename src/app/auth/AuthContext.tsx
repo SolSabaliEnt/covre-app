@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mockAuthStore.logout()
       return
     }
-    void supabaseAuthAdapter.logout().then(() => {
+    void Promise.resolve(supabaseAuthAdapter.logout()).then(() => {
       setSupabaseSession({ name: "", isAuthenticated: false, isLoading: false })
     })
   }, [backendMode])
