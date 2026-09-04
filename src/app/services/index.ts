@@ -27,4 +27,5 @@ export {
 } from './providerWorkerRelationshipService';
 export * from './adminService';
 export * from './adminContinuityService';
+export * from './adminContinuityReadinessService';
 export * from './referralService';
