@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { StatusBadge } from '../../components/StatusBadge';
-import { Star, Shield, Plus, Calendar, Users } from 'lucide-react';
+import { Star, Shield, Calendar, Users, Bookmark, History } from 'lucide-react';
 import { getProviderBench, inviteWorkerToShift } from '../../services';
 import { useProviderAction } from '../../hooks/useProviderAction';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
@@ -43,13 +43,10 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void
 function BenchEmptyState({ message }: { message?: string }) {
   return (
     <div className="rounded-xl border border-[#DDE7E8] bg-white p-6 sm:p-8">
-      <h2 className="text-lg font-semibold text-[#13334F]">Your bench is empty</h2>
+      <h2 className="text-lg font-semibold text-[#13334F]">No bench relationships yet</h2>
       <p className="mt-2 text-sm leading-relaxed text-[#607583]">
         {message ??
-          'Workers you book or save will appear here once bench management is connected.'}
-      </p>
-      <p className="mt-3 text-sm text-[#607583]">
-        Bench is not built yet. Preferred-worker lists and save-to-bench will ship in a later pass.
+          'Workers you deliberately save will appear here. Approved work history remains separate.'}
       </p>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Link
@@ -134,8 +131,15 @@ function MockBenchWorkerRow({
   );
 }
 
-function SupabaseBenchWorkerRow({ worker }: { worker: ProviderBenchWorker }) {
+function SupabaseBenchWorkerRow({
+  worker,
+  isSaved,
+}: {
+  worker: ProviderBenchWorker;
+  isSaved: boolean;
+}) {
   const role = worker.roleLabel ?? 'Care worker';
+  const approvedCount = worker.completedShiftCount ?? 0;
 
   return (
     <div className="flex flex-col gap-4 rounded-lg bg-[#F7FAFA] p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -147,26 +151,25 @@ function SupabaseBenchWorkerRow({ worker }: { worker: ProviderBenchWorker }) {
           {workerInitials(worker.name)}
         </div>
         <div className="min-w-0">
-          <div className="font-semibold text-[#13334F] hover:text-[#53B59F]">{worker.name}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="font-semibold text-[#13334F] hover:text-[#53B59F]">{worker.name}</div>
+            {isSaved ? <StatusBadge variant="preferred">Saved</StatusBadge> : null}
+          </div>
           <div className="text-sm text-[#607583]">{role}</div>
-          {worker.completedShiftCount != null && worker.completedShiftCount > 0 ? (
-            <p className="mt-1 text-xs text-[#607583]">
-              {worker.completedShiftCount} confirmed booking
-              {worker.completedShiftCount === 1 ? '' : 's'}
-              {worker.lastWorkedAt ? ` · Last booked ${worker.lastWorkedAt}` : ''}
-            </p>
-          ) : null}
+          <p className="mt-1 text-xs text-[#607583]">
+            {approvedCount > 0
+              ? `${approvedCount} approved ${approvedCount === 1 ? 'shift' : 'shifts'} together${worker.lastWorkedAt ? ` · Last approved ${worker.lastWorkedAt}` : ''}`
+              : 'Saved intentionally · no approved work together yet'}
+          </p>
         </div>
       </Link>
 
-      <button
-        type="button"
-        disabled
-        title="Shift invites from bench are coming soon"
-        className="w-full cursor-not-allowed rounded-lg border border-[#DDE7E8] bg-white px-4 py-2 text-sm font-medium text-[#607583] opacity-80 sm:w-auto"
+      <Link
+        to={`/provider/workers/${worker.id}`}
+        className="inline-flex w-full items-center justify-center rounded-lg border border-[#DDE7E8] bg-white px-4 py-2 text-sm font-medium text-[#13334F] no-underline transition-colors hover:bg-[#EEF4F5] sm:w-auto"
       >
-        Invite coming soon
-      </button>
+        {approvedCount > 0 ? 'View shared history' : 'View profile'}
+      </Link>
     </div>
   );
 }
@@ -199,41 +202,52 @@ export default function Bench() {
   return (
     <div className="min-h-full w-full min-w-0 max-w-full bg-[#F7FAFA] px-4 py-6">
       <div className="mx-auto w-full max-w-full min-w-0 space-y-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="break-words text-2xl font-semibold text-[#13334F]">Covre Bench</h1>
-            <p className="mt-1 text-sm text-[#607583]">
-              {isSupabase
-                ? 'Workers you have booked with your organization'
-                : 'Your trusted pool of preferred workers'}
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={isSupabase}
-            onClick={() => {
-              if (isSupabase) {
-                toast.message(
-                  'Save-to-bench is coming soon. Book workers from shift applications for now.',
-                );
-                return;
-              }
-              toast.success('Add worker request queued');
-            }}
-            className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-[#53B59F] px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:text-base"
-          >
-            <Plus className="h-5 w-5" />
-            {isSupabase ? 'Add worker (soon)' : 'Add Worker'}
-          </button>
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-semibold text-[#13334F]">Covre Bench</h1>
+          <p className="mt-1 text-sm text-[#607583]">
+            {isSupabase
+              ? 'Workers you choose to keep close, separated from workers you simply know through approved work.'
+              : 'Your trusted pool of preferred workers'}
+          </p>
         </div>
+
+        {isSupabase ? (
+          <div className="rounded-2xl border border-[#BFDCD5] bg-[#E6F6F2] p-4">
+            <div className="flex items-start gap-3">
+              <Bookmark className="mt-0.5 h-5 w-5 shrink-0 text-[#257665]" aria-hidden />
+              <div>
+                <p className="font-semibold text-[#13334F]">Bench means deliberate provider preference.</p>
+                <p className="mt-1 text-sm leading-relaxed text-[#607583]">
+                  Approved work history can make someone familiar without putting them on your bench. Do-not-send workers stay out of these bench-facing lists while their verified history remains intact.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {isSupabase && !hasWorkers ? <BenchEmptyState message={data.message} /> : null}
 
         {data.sections.map(section =>
           section.workers.length === 0 ? null : (
             <div key={section.title} className="rounded-xl border border-[#DDE7E8] bg-white p-4 sm:p-6">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold text-[#13334F] sm:text-xl">{section.title}</h2>
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    {isSupabase && section.title === 'Saved to your Bench' ? (
+                      <Bookmark className="h-4 w-4 text-[#53B59F]" aria-hidden />
+                    ) : isSupabase ? (
+                      <History className="h-4 w-4 text-[#607583]" aria-hidden />
+                    ) : null}
+                    <h2 className="text-lg font-semibold text-[#13334F] sm:text-xl">{section.title}</h2>
+                  </div>
+                  {isSupabase ? (
+                    <p className="mt-1 text-xs leading-relaxed text-[#607583]">
+                      {section.title === 'Saved to your Bench'
+                        ? 'Explicitly saved by your organization. This does not imply mutual preference.'
+                        : 'Familiar through approved work, but not explicitly saved to your bench.'}
+                    </p>
+                  ) : null}
+                </div>
                 <StatusBadge variant="preferred">
                   {section.workers.length} worker{section.workers.length === 1 ? '' : 's'}
                 </StatusBadge>
@@ -242,7 +256,11 @@ export default function Bench() {
               <div className="space-y-3">
                 {section.workers.map(worker =>
                   isSupabase ? (
-                    <SupabaseBenchWorkerRow key={`${section.title}-${worker.id}`} worker={worker} />
+                    <SupabaseBenchWorkerRow
+                      key={`${section.title}-${worker.id}`}
+                      worker={worker}
+                      isSaved={section.title === 'Saved to your Bench'}
+                    />
                   ) : (
                     <MockBenchWorkerRow
                       key={`${section.title}-${worker.id}`}
@@ -260,9 +278,8 @@ export default function Bench() {
         )}
 
         {isSupabase && hasWorkers ? (
-          <p className="text-center text-xs text-[#607583]">
-            Preferred bench lists and save-to-bench are coming soon. Only confirmed bookings are
-            shown — no scores or simulated invites.
+          <p className="text-center text-xs leading-relaxed text-[#607583]">
+            Covre Bench is provider-private. Worker return preferences remain private to workers and are not shown here.
           </p>
         ) : null}
       </div>
