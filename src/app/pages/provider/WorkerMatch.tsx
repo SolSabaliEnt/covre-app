@@ -8,6 +8,7 @@ import {
   bookWorkerForShift,
   getProviderWorkerMatchPage,
   getProviderWorkerProfile,
+  trackContinuityEvent,
 } from '../../services';
 import type { ProviderWorkerMatchPage } from '../../services/types';
 import { useProviderAction } from '../../hooks/useProviderAction';
@@ -46,8 +47,7 @@ function NotFoundCard() {
     <div className="mx-auto w-full min-w-0 max-w-lg rounded-2xl border border-[#DDE7E8] bg-white p-6 shadow-sm">
       <h1 className="text-lg font-semibold text-[#13334F]">Shift not found</h1>
       <p className="mt-2 text-sm text-[#607583]">
-        This shift was not found for your organization. Return to shift management to choose another
-        shift.
+        This shift was not found for your organization. Return to shift management to choose another shift.
       </p>
       <Link
         to="/provider/shifts"
@@ -61,16 +61,13 @@ function NotFoundCard() {
 }
 
 function SimulatedNotice({ page }: { page: ProviderWorkerMatchPage }) {
-  if (page.source !== 'supabase_shift_mock_candidates') {
-    return null;
-  }
+  if (page.source !== 'supabase_shift_mock_candidates') return null;
   return (
     <div
       className="rounded-xl border border-[#DDE7E8] bg-[#F7FAFA] px-4 py-3 text-sm leading-relaxed text-[#607583]"
       role="status"
     >
-      Candidate recommendations and booking actions are simulated here. Real worker applications and
-      booking acceptance live on shift detail; continuity language in this preview does not bypass that boundary.
+      Candidate recommendations and booking actions are simulated here. Real worker applications and booking acceptance live on shift detail; continuity language in this preview does not bypass that boundary.
     </div>
   );
 }
@@ -158,18 +155,14 @@ export default function WorkerMatch() {
           <p className="mt-1 break-words text-sm text-[#607583]">{shiftSummaryLine(page)}</p>
           <p className="mt-1 text-sm text-[#607583]">
             Bill rate: {shift.hourlyPayDisplay}
-            {shift.isUrgent ? (
-              <span className="ml-2 font-medium text-[#A93636]">· Urgent</span>
-            ) : null}
+            {shift.isUrgent ? <span className="ml-2 font-medium text-[#A93636]">· Urgent</span> : null}
           </p>
         </div>
 
         <SimulatedNotice page={page} />
 
         <div className="rounded-xl border border-[#53B59F] bg-[#E6F6F2] p-4">
-          <div className="font-semibold text-[#13334F]">
-            {candidates.length} qualified workers available
-          </div>
+          <div className="font-semibold text-[#13334F]">{candidates.length} qualified workers available</div>
           <div className="text-sm text-[#607583]">
             {isSupabaseSimulated
               ? 'Demo workers shown for layout review; matching is not connected yet.'
@@ -190,6 +183,17 @@ export default function WorkerMatch() {
                   <div className="flex min-w-0 items-start gap-4">
                     <Link
                       to={`/provider/workers/${worker.id}`}
+                      onClick={() => {
+                        if (!isFamiliarHere) return;
+                        trackContinuityEvent('provider_repeat_worker_open', {
+                          actor: 'provider',
+                          workerId: worker.id,
+                          siteId: shift.siteId,
+                          shiftId: shift.id,
+                          source: 'worker_match_avatar',
+                          completedShiftsHere: priorShiftsHere,
+                        });
+                      }}
                       className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#53B59F] text-xl font-semibold text-white no-underline transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] sm:h-16 sm:w-16"
                       aria-label={`Open profile for ${worker.name}`}
                     >
@@ -202,16 +206,23 @@ export default function WorkerMatch() {
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <Link
                           to={`/provider/workers/${worker.id}`}
+                          onClick={() => {
+                            if (!isFamiliarHere) return;
+                            trackContinuityEvent('provider_repeat_worker_open', {
+                              actor: 'provider',
+                              workerId: worker.id,
+                              siteId: shift.siteId,
+                              shiftId: shift.id,
+                              source: 'worker_match_name',
+                              completedShiftsHere: priorShiftsHere,
+                            });
+                          }}
                           className="break-words text-lg font-semibold text-[#13334F] no-underline hover:text-[#53B59F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#53B59F] sm:text-xl"
                         >
                           {worker.name}
                         </Link>
-                        {worker.status === 'preferred' ? (
-                          <StatusBadge variant="preferred">Preferred</StatusBadge>
-                        ) : null}
-                        {isFamiliarHere ? (
-                          <StatusBadge variant="verified">Familiar here</StatusBadge>
-                        ) : null}
+                        {worker.status === 'preferred' ? <StatusBadge variant="preferred">Preferred</StatusBadge> : null}
+                        {isFamiliarHere ? <StatusBadge variant="verified">Familiar here</StatusBadge> : null}
                       </div>
                       <div className="text-[#607583]">{worker.role}</div>
                       <div className="mt-2 flex flex-wrap items-center gap-4 text-sm">
@@ -296,12 +307,20 @@ export default function WorkerMatch() {
                     disabled={bookedByWorker[worker.id] || isPending(`book-${worker.id}`)}
                     onClick={async e => {
                       e.stopPropagation();
-                      const r = await run(`book-${worker.id}`, () =>
-                        bookWorkerForShift(worker.id, shift.id),
-                      );
+                      const r = await run(`book-${worker.id}`, () => bookWorkerForShift(worker.id, shift.id));
                       if (r.ok) {
                         toast.success(r.data.message);
                         setBookedByWorker(prev => ({ ...prev, [worker.id]: true }));
+                        if (isFamiliarHere) {
+                          trackContinuityEvent('provider_rebook_action', {
+                            actor: 'provider',
+                            workerId: worker.id,
+                            siteId: shift.siteId,
+                            shiftId: shift.id,
+                            source: isSupabaseSimulated ? 'worker_match_simulated_book_again' : 'worker_match_book_again',
+                            completedShiftsHere: priorShiftsHere,
+                          });
+                        }
                       } else toast.error(r.error.message);
                     }}
                     className="w-full rounded-lg bg-[#53B59F] px-6 py-3 font-medium text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
@@ -318,6 +337,17 @@ export default function WorkerMatch() {
                   </button>
                   <Link
                     to={`/provider/workers/${worker.id}`}
+                    onClick={() => {
+                      if (!isFamiliarHere) return;
+                      trackContinuityEvent('provider_repeat_worker_open', {
+                        actor: 'provider',
+                        workerId: worker.id,
+                        siteId: shift.siteId,
+                        shiftId: shift.id,
+                        source: 'worker_match_shared_history',
+                        completedShiftsHere: priorShiftsHere,
+                      });
+                    }}
                     className="flex w-full items-center justify-center rounded-lg bg-[#E8EEF2] px-6 py-3 text-center font-medium text-[#13334F] no-underline transition-colors hover:bg-[#DDE7E8] sm:flex-1"
                   >
                     {isFamiliarHere ? 'View Shared History' : 'View Profile'}
