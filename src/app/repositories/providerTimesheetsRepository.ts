@@ -332,7 +332,7 @@ export async function approveProviderTimesheetInSupabase(
     }
 
     const forbidden = assertCanReviewTimesheets(membershipResult.data)
-    if (forbidden) return forbidden
+    if (forbidden && !forbidden.ok) return forbidden
 
     const supabase = getSupabaseClient()
     const verifyResult = await verifySubmittedTimesheet(
@@ -401,7 +401,7 @@ export async function disputeProviderTimesheetInSupabase(
     }
 
     const forbidden = assertCanReviewTimesheets(membershipResult.data)
-    if (forbidden) return forbidden
+    if (forbidden && !forbidden.ok) return forbidden
 
     const supabase = getSupabaseClient()
     const verifyResult = await verifySubmittedTimesheet(

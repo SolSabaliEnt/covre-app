@@ -535,7 +535,7 @@ export async function generateProviderCompliancePacketFromApprovedTimesheetInSup
     }
 
     const forbidden = assertCanGeneratePackets(membershipResult.data)
-    if (forbidden) return forbidden
+    if (forbidden && !forbidden.ok) return forbidden
 
     const supabase = getSupabaseClient()
     const providerId = membershipResult.data.providerId

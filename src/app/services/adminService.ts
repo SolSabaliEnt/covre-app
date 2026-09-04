@@ -867,7 +867,7 @@ export async function listAdminSupportTickets(): Promise<ApiResult<AdminSupportT
     openCount: rows.filter(r => r.status === 'open').length,
     assignedCount: rows.filter(r => r.status === 'assigned').length,
     resolvedCount: rows.filter(r => r.status === 'resolved').length,
-    closedCount: rows.filter(r => r.status === 'closed').length,
+    closedCount: 0,
     urgentCount: rows.filter(r => r.priority === 'urgent').length,
     isSupabaseBacked: false,
   }));
