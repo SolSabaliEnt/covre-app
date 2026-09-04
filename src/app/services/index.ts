@@ -22,6 +22,10 @@ export * from './providerShiftInvitationService';
 export * from './providerApplicantReviewService';
 export * from './providerApplicantReviewTypes';
 export {
+  bookWorkerForShift,
+  inviteWorkerToShift,
+} from './providerLegacyActionGuards';
+export {
   saveWorkerToProviderBench as addWorkerToBench,
   saveWorkerDoNotSend as markWorkerDoNotSend,
 } from './providerWorkerRelationshipService';
