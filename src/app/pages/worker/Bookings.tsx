@@ -12,6 +12,7 @@ import {
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { useWorkerAction } from '../../hooks/useWorkerAction';
 import { StatusBadge } from '../../components/StatusBadge';
+import { WorkerShiftInvitations } from '../../components/WorkerShiftInvitations';
 import { isSupabaseBackendEnabled } from '../../lib/backendMode';
 import {
   acceptedPayRateLabel,
@@ -192,12 +193,14 @@ export default function WorkerBookings() {
         <h1 className="text-2xl font-semibold text-[#13334F]">Bookings</h1>
         <p className="mt-2 text-sm text-[#607583]">
           {supabaseMode
-            ? 'Bookings and accepted pay stay here; continuity recognition is based on approved work only.'
-            : 'Track confirmed shifts, upcoming work, and completed coverage.'}
+            ? 'Invitations, confirmed bookings, and accepted pay stay here; continuity recognition is based on approved work only.'
+            : 'Track invitations, confirmed shifts, upcoming work, and completed coverage.'}
         </p>
       </header>
 
       <div className="space-y-8 py-4">
+        <WorkerShiftInvitations />
+
         {loading && <LoadingBlock />}
         {error && <ErrorBlock message={error.message} onRetry={reload} />}
 
@@ -223,7 +226,7 @@ export default function WorkerBookings() {
 
         {!loading && !error && isEmpty && (
           <div className="rounded-2xl border border-[#DDE7E8] bg-white p-8 text-center shadow-sm">
-            <p className="text-sm text-[#607583]">No bookings yet. Apply for open shifts to get started.</p>
+            <p className="text-sm text-[#607583]">No bookings yet. Apply for open shifts or respond to an invitation to get started.</p>
             <Link to="/worker/shifts" className="mt-4 inline-flex text-sm font-semibold text-[#53B59F] hover:underline">
               Browse open shifts →
             </Link>
