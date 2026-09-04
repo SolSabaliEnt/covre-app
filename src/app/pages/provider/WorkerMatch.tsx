@@ -68,7 +68,7 @@ function SimulatedNotice({ page }: { page: ProviderWorkerMatchPage }) {
       className="rounded-xl border border-[#DDE7E8] bg-[#F7FAFA] px-4 py-3 text-sm leading-relaxed text-[#607583]"
       role="status"
     >
-      Candidate recommendations and booking actions are simulated here. Prior-site counts, when available, come from approved work history; real applications and booking acceptance still live on shift detail.
+      Candidate cards are demo-only in Supabase mode. Covre will not book or save these synthetic worker IDs. Use the real shift review and real worker-profile flows for production actions. Approved-site history is shown only when a candidate ID actually matches a real worker.
     </div>
   );
 }
@@ -177,7 +177,7 @@ export default function WorkerMatch() {
           <div className="font-semibold text-[#13334F]">{candidates.length} qualified workers available</div>
           <div className="text-sm text-[#607583]">
             {isSupabaseSimulated
-              ? 'Demo workers remain for layout review; any matching worker IDs use canonical approved-work familiarity.'
+              ? 'Demo workers remain for layout review; production mutations are disabled on these cards.'
               : 'Credential fit and prior site history are shown together.'}
           </div>
         </div>
@@ -311,39 +311,46 @@ export default function WorkerMatch() {
                   {isFamiliarHere ? 'Continue this relationship' : 'Start this relationship'}
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                  <button
-                    type="button"
-                    disabled={bookedByWorker[worker.id] || isPending(`book-${worker.id}`)}
-                    onClick={async e => {
-                      e.stopPropagation();
-                      const r = await run(`book-${worker.id}`, () => bookWorkerForShift(worker.id, shift.id));
-                      if (r.ok) {
-                        toast.success(r.data.message);
-                        setBookedByWorker(prev => ({ ...prev, [worker.id]: true }));
-                        if (isFamiliarHere) {
-                          trackContinuityEvent('provider_rebook_action', {
-                            actor: 'provider',
-                            workerId: worker.id,
-                            siteId: shift.siteId,
-                            shiftId: shift.id,
-                            source: isSupabaseSimulated ? 'worker_match_simulated_book_again' : 'worker_match_book_again',
-                            completedShiftsHere: priorShiftsHere,
-                          });
-                        }
-                      } else toast.error(r.error.message);
-                    }}
-                    className="w-full rounded-lg bg-[#53B59F] px-6 py-3 font-medium text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
-                  >
-                    {bookedByWorker[worker.id]
-                      ? isSupabaseSimulated
-                        ? 'Simulated booking'
-                        : isFamiliarHere
+                  {isSupabaseSimulated ? (
+                    <Link
+                      to={`/provider/shifts/${shift.id}`}
+                      className="flex w-full items-center justify-center rounded-lg bg-[#53B59F] px-6 py-3 text-center font-medium text-white no-underline transition-colors hover:bg-[#2F8E7A] sm:flex-1"
+                    >
+                      Review real applicants
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={bookedByWorker[worker.id] || isPending(`book-${worker.id}`)}
+                      onClick={async e => {
+                        e.stopPropagation();
+                        const r = await run(`book-${worker.id}`, () => bookWorkerForShift(worker.id, shift.id));
+                        if (r.ok) {
+                          toast.success(r.data.message);
+                          setBookedByWorker(prev => ({ ...prev, [worker.id]: true }));
+                          if (isFamiliarHere) {
+                            trackContinuityEvent('provider_rebook_action', {
+                              actor: 'provider',
+                              workerId: worker.id,
+                              siteId: shift.siteId,
+                              shiftId: shift.id,
+                              source: 'worker_match_book_again',
+                              completedShiftsHere: priorShiftsHere,
+                            });
+                          }
+                        } else toast.error(r.error.message);
+                      }}
+                      className="w-full rounded-lg bg-[#53B59F] px-6 py-3 font-medium text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
+                    >
+                      {bookedByWorker[worker.id]
+                        ? isFamiliarHere
                           ? 'Booked again'
                           : 'Booked'
-                      : isFamiliarHere
-                        ? 'Book Again'
-                        : 'Book Worker'}
-                  </button>
+                        : isFamiliarHere
+                          ? 'Book Again'
+                          : 'Book Worker'}
+                    </button>
+                  )}
                   <Link
                     to={`/provider/workers/${worker.id}`}
                     onClick={() => {
@@ -363,9 +370,10 @@ export default function WorkerMatch() {
                   </Link>
                   <button
                     type="button"
-                    disabled={benchByWorker[worker.id] || isPending(`bench-${worker.id}`)}
+                    disabled={isSupabaseSimulated || benchByWorker[worker.id] || isPending(`bench-${worker.id}`)}
                     onClick={async e => {
                       e.stopPropagation();
+                      if (isSupabaseSimulated) return;
                       const r = await run(`bench-${worker.id}`, () => addWorkerToBench(worker.id));
                       if (r.ok) {
                         toast.success(r.data.message);
@@ -374,11 +382,11 @@ export default function WorkerMatch() {
                     }}
                     className="w-full rounded-lg border border-[#DDE7E8] bg-white px-6 py-3 font-medium text-[#13334F] transition-colors hover:bg-[#F7FAFA] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-1"
                   >
-                    {benchByWorker[worker.id]
-                      ? isSupabaseSimulated
-                        ? 'Simulated bench'
-                        : 'Added'
-                      : 'Add to Bench'}
+                    {isSupabaseSimulated
+                      ? 'Real worker required'
+                      : benchByWorker[worker.id]
+                        ? 'Added'
+                        : 'Add to Bench'}
                   </button>
                 </div>
               </div>
