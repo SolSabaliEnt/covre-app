@@ -1,16 +1,21 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Eye, LockKeyhole, Smartphone } from 'lucide-react';
 import { isSupabaseBackendEnabled } from '../lib/backendMode';
 
 export function AdminPreviewFrame({
   audience,
-  children,
+  children: _children,
 }: {
   audience: 'Worker' | 'Provider';
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   const supabaseMode = isSupabaseBackendEnabled();
+  const location = useLocation();
+  const renderPath = location.pathname.replace(
+    '/admin/full-app/',
+    '/admin/preview-render/',
+  );
 
   return (
     <div className="min-h-full bg-[#F3F7F7]">
@@ -61,23 +66,21 @@ export function AdminPreviewFrame({
             <span>390 × 844</span>
           </div>
 
-          <div className="overflow-hidden rounded-[28px] border border-[#CBD9DC] bg-white shadow-[0_18px_50px_rgba(19,51,79,0.16)] ring-1 ring-white">
-            <div
-              className="h-[844px] overflow-x-hidden overflow-y-auto overscroll-contain bg-[#F7FAFA]"
-              aria-label={`${audience} app mobile viewport`}
-            >
-              <div
-                className="pointer-events-none h-full min-h-full select-none"
-                aria-label={`${audience} app read-only preview`}
-              >
-                {children}
-              </div>
-            </div>
+          <div className="h-[844px] w-[390px] max-w-full overflow-hidden rounded-[28px] border border-[#CBD9DC] bg-white shadow-[0_18px_50px_rgba(19,51,79,0.16)] ring-1 ring-white">
+            <iframe
+              title={`${audience} mobile app preview`}
+              src={renderPath}
+              width="390"
+              height="844"
+              tabIndex={-1}
+              sandbox="allow-scripts allow-same-origin"
+              className="pointer-events-none block h-[844px] w-[390px] max-w-full border-0 bg-white"
+            />
           </div>
         </div>
 
         <p className="mx-auto mt-4 max-w-xl text-center text-xs leading-5 text-[#607583]">
-          Interactions are disabled in Super Admin Preview so inspecting the app cannot create or mutate worker/provider data.
+          The preview now runs in its own 390 × 844 browser viewport, so mobile breakpoints and viewport-height spacing match the real app. Interactions remain disabled.
         </p>
       </div>
     </div>
