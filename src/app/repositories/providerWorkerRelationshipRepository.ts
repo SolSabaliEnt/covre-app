@@ -49,6 +49,42 @@ async function currentProviderId(): Promise<ApiResult<string>> {
   return ok(data.provider_id as string);
 }
 
+function mapRelationship(data: {
+  provider_id: unknown;
+  worker_id: unknown;
+  state: unknown;
+  updated_at: unknown;
+}): ProviderWorkerRelationship {
+  return {
+    providerId: data.provider_id as string,
+    workerId: data.worker_id as string,
+    state: data.state as ProviderWorkerRelationshipState,
+    updatedAt: data.updated_at as string,
+  };
+}
+
+export async function listProviderWorkerRelationshipsFromSupabase(): Promise<
+  ApiResult<ProviderWorkerRelationship[]>
+> {
+  const provider = await currentProviderId();
+  if (!provider.ok) return provider;
+
+  const { data, error } = await getSupabaseClient()
+    .from('provider_worker_relationships')
+    .select('provider_id, worker_id, state, updated_at')
+    .eq('provider_id', provider.data)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    return fail(
+      'provider_worker_relationships_load',
+      friendlyDbMessage(error, 'Unable to load provider relationship states.'),
+    );
+  }
+
+  return ok((data ?? []).map(row => mapRelationship(row)));
+}
+
 export async function getProviderWorkerRelationshipFromSupabase(
   workerId: string,
 ): Promise<ApiResult<ProviderWorkerRelationship | null>> {
@@ -65,12 +101,7 @@ export async function getProviderWorkerRelationshipFromSupabase(
   if (error) return fail('provider_worker_relationship_load', friendlyDbMessage(error, 'Unable to load provider relationship state.'));
   if (!data) return ok(null);
 
-  return ok({
-    providerId: data.provider_id as string,
-    workerId: data.worker_id as string,
-    state: data.state as ProviderWorkerRelationshipState,
-    updatedAt: data.updated_at as string,
-  });
+  return ok(mapRelationship(data));
 }
 
 async function setRelationship(
@@ -81,6 +112,7 @@ async function setRelationship(
   if (!provider.ok) return provider;
 
   const now = new Date().toISOString();
+  const session = (await getSupabaseClient().auth.getSession()).data.session;
   const { error } = await getSupabaseClient()
     .from('provider_worker_relationships')
     .upsert(
@@ -88,7 +120,7 @@ async function setRelationship(
         provider_id: provider.data,
         worker_id: workerId,
         state,
-        updated_by: (await getSupabaseClient().auth.getSession()).data.session?.user.id ?? null,
+        updated_by: session?.user.id ?? null,
         updated_at: now,
       },
       { onConflict: 'provider_id,worker_id' },
