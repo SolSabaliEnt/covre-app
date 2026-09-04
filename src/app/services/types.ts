@@ -235,6 +235,7 @@ export type WorkerShiftRequestSummary = {
 export type WorkerActionStatus =
   | 'claimed'
   | 'saved'
+  | 'site_return_preference_saved'
   | 'question_sent'
   | 'calendar_added'
   | 'clocked_in'
@@ -618,558 +619,121 @@ export type ReferralRecord = {
 export type ReferralDashboard = {
   referralLink: string;
   totalPending: number;
-  totalQualified: number;
-  totalPaidOrCredited: number;
+  totalEarned: number;
+  referrals: ReferralRecord[];
   tiers: ReferralProgramTier[];
-  records: ReferralRecord[];
-  /** Supabase prep — org-aware link; credits/tracker may be simulated. */
-  providerId?: string;
-  organizationName?: string;
-  setupStatus?: 'complete' | 'incomplete';
-  isSupabaseBacked?: boolean;
-  isSimulated?: boolean;
+  programTerms: string[];
 };
 
-export type ReferralActionResult = {
+/** Admin users directory — one row per mock worker/provider/admin persona. */
+export type AdminUserRole = 'worker' | 'provider' | 'admin';
+
+export type AdminUserRow = {
   id: string;
-  status: string;
-  message: string;
-  updatedAt: string;
+  name: string;
+  role: AdminUserRole;
+  email: string;
+  status: 'active' | 'review' | 'suspended';
+  detail: string;
 };
 
-export type ReferralInvitePayload = {
-  track: ReferralTrack;
-  referredOrganization: string;
-  referredContact: string;
-  facilityType: string;
-};
-
-/** Provider compliance prep — readiness rows from real shifts until packets are generated. */
-export type ProviderCompliancePacketStatus =
-  | 'ready'
-  | 'ready_for_packet'
-  | 'packet_generated'
-  | 'pending_worker'
-  | 'pending_timesheet'
-  | 'simulated';
-
-export type ProviderCompliancePacketRow = {
+/** Admin marketplace shift row — derived from mock Shift catalog. */
+export type AdminMarketplaceShiftRow = {
   id: string;
-  shiftId: string;
-  siteId: string;
-  shiftTitle: string;
+  title: string;
   siteName: string;
-  shiftDate: string;
-  status: ProviderCompliancePacketStatus;
-  statusLabel: string;
-  packetType: string;
-  generatedAt?: string;
-  isSimulated: boolean;
-  missingItems?: string[];
-  timesheetId?: string;
-  packetId?: string;
-  bookingId?: string;
-  hasFile?: boolean;
-  isSupabaseBacked?: boolean;
-};
-
-export type ProviderCompliancePacketGenerationResult = {
-  packetId: string;
-  bookingId: string;
-  timesheetId?: string;
+  providerName: string;
+  dateTime: string;
   status: string;
-  message: string;
-  generatedAt: string;
-  limitations?: string[];
-};
-
-export type ProviderGeneratedCompliancePacketRow = {
-  packetId: string;
-  bookingId: string;
-  timesheetId?: string;
-  shiftId: string;
-  workerName: string;
-  siteName: string;
-  shiftDate: string;
-  status: string;
-  generatedAt?: string;
-  hasFile: boolean;
-  isSupabaseBacked: boolean;
-};
-
-/** Provider billing prep — readiness from real shifts until invoices/payments are wired. */
-export type ProviderBillingReadinessStatus =
-  | 'ready'
-  | 'pending_booking'
-  | 'pending_timesheet'
-  | 'simulated';
-
-export type ProviderBillingReadinessRow = {
-  id: string;
-  shiftId: string;
-  shiftTitle: string;
-  siteName: string;
-  shiftDate: string;
-  estimatedAmount: number;
-  status: ProviderBillingReadinessStatus;
-  statusLabel: string;
-  isSimulated: boolean;
-  missingItems?: string[];
+  workerName: string | null;
+  payDisplay: string;
 };
 
 export type ProviderBillingSummary = {
-  estimatedOpenValue: number;
-  readyToInvoiceValue: number;
-  simulatedInvoiceValue: number;
-  rows: ProviderBillingReadinessRow[];
-  approvedTimesheetRows?: ProviderApprovedTimesheetBillingRow[];
-};
-
-export type ProviderInvoiceStatus = 'draft' | 'generated' | 'void';
-
-/** Collection sub-state on `invoices.payment_status` (0029+). Not used in UI until issue/collect RPCs ship. */
-export type ProviderInvoicePaymentStatus =
-  | 'not_started'
-  | 'requires_payment_method'
-  | 'processing'
-  | 'paid'
-  | 'failed'
-  | 'past_due'
-  | 'void'
-  | 'refunded'
-  | 'disputed';
-
-export type ProviderInvoiceLineRow = {
-  id: string;
-  timesheetId: string;
-  bookingId: string;
-  shiftId: string;
-  workerName: string;
-  siteName: string;
-  description: string;
-  hours: number;
-  rate?: number;
-  amount: number;
+  currentBalance: string;
+  upcomingInvoiceDate: string;
+  paymentMethodLabel: string;
+  autoPayEnabled: boolean;
+  invoiceDeliveryEmail: string;
 };
 
 export type ProviderInvoiceRow = {
-  invoiceId: string;
-  providerId: string;
-  status: ProviderInvoiceStatus;
-  totalAmount: number;
-  generatedAt?: string;
-  lineCount: number;
-  lines?: ProviderInvoiceLineRow[];
-  isSupabaseBacked: boolean;
-  /** Optional lifecycle fields (0029+); populated when repositories select them. */
-  invoiceNumber?: string;
-  issuedAt?: string;
-  lockedAt?: string;
+  id: string;
+  invoiceNumber: string;
+  periodLabel: string;
+  status: 'draft' | 'open' | 'paid' | 'void' | 'uncollectible';
+  subtotal: number;
+  tax: number;
+  total: number;
+  currency: string;
+  dueAt?: string;
   paidAt?: string;
-  voidedAt?: string;
-  paymentStatus?: ProviderInvoicePaymentStatus;
-  totalCents?: number;
-  currency?: string;
+  lineItemCount: number;
+  isSimulated: boolean;
 };
 
 export type ProviderInvoiceGenerationResult = {
   invoiceId: string;
-  status: ProviderInvoiceStatus;
+  status: 'generated' | 'no_ready_timesheets';
   message: string;
-  totalAmount: number;
   generatedAt: string;
 };
 
-/** Admin invoice issue queue row (`/admin/payments`). */
-export type AdminInvoiceIssueRow = {
-  invoiceId: string;
-  providerName?: string;
-  invoiceNumber?: string;
-  status: string;
-  paymentStatus?: ProviderInvoicePaymentStatus;
-  totalCents?: number;
-  totalDisplay: string;
-  lineCount: number;
-  lineTotalCents: number;
-  generatedAt?: string;
-  dueAt?: string;
-  canIssue: boolean;
-  blockerReason?: string;
-};
-
-export type AdminInvoiceIssueQueue = {
-  rows: AdminInvoiceIssueRow[];
-  summary: {
-    draftInvoices: number;
-    readyToIssue: number;
-    blocked: number;
-    openInvoices: number;
-  };
-  isSupabaseBacked: boolean;
-  message?: string;
-};
-
-/** Admin provider invoice collection queue row (`/admin/payments`). */
-export type AdminProviderInvoiceCollectionRow = {
-  invoiceId: string;
-  providerId: string;
-  providerName?: string;
-  invoiceNumber?: string;
-  status: string;
-  paymentStatus?: ProviderInvoicePaymentStatus;
-  totalCents?: number;
-  totalDisplay: string;
-  currency: string;
-  lockedAt?: string;
-  issuedAt?: string;
-  dueAt?: string;
-  collectionStartedAt?: string;
-  lastPaymentAttemptAt?: string;
-  paidAt?: string;
-  hasActivePaymentMethod: boolean;
-  methodBrand?: string;
-  methodLast4?: string;
-  latestPaymentStatus?: string;
-  latestProcessorPaymentStatus?: string;
-  latestProviderPaymentId?: string;
-  canCollect: boolean;
-  blockerReason?: string;
-};
-
-export type AdminProviderInvoiceCollectionQueue = {
-  rows: AdminProviderInvoiceCollectionRow[];
-  summary: {
-    openInvoices: number;
-    readyToCollect: number;
-    missingPaymentMethod: number;
-    processing: number;
-    paid: number;
-  };
-  isSupabaseBacked: boolean;
-  collectionUiEnabled: boolean;
-  message?: string;
-};
-
-/** Edge result from create-provider-invoice-payment-intent (safe fields only). */
-export type ProviderInvoiceCollectionStartResult = {
-  providerPaymentId: string;
-  invoiceId: string;
-  processorPaymentIntentId: string;
-  processorPaymentStatus: string;
-  status: string;
-  amountCents: number;
-  currency: string;
-  duplicate?: boolean;
-  message: string;
-};
-
-/** Admin issue RPC result (0030+). */
-export type ProviderInvoiceIssueResult = {
-  invoiceId: string;
-  invoiceNumber?: string;
-  status: string;
-  paymentStatus?: ProviderInvoicePaymentStatus;
-  totalCents: number;
-  issuedAt?: string;
-  lockedAt?: string;
-  message: string;
-};
-
-export type ProviderPaymentMethodStatus =
-  | 'pending'
-  | 'active'
-  | 'inactive'
-  | 'failed'
-  | 'removed';
-
-export type ProviderPaymentMethodSummary = {
-  id: string;
-  processor: string;
-  status: ProviderPaymentMethodStatus;
-  brand?: string;
-  last4?: string;
-  isDefault: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-  isSupabaseBacked: boolean;
-};
-
 export type ProviderPaymentMethodReadiness = {
-  methods: ProviderPaymentMethodSummary[];
-  defaultMethod?: ProviderPaymentMethodSummary;
-  hasActiveMethod: boolean;
-  isSupabaseBacked: boolean;
-  message?: string;
-};
-
-export type WorkerEarningStatus =
-  | 'pending'
-  | 'approved'
-  | 'held'
-  | 'queued'
-  | 'paid'
-  | 'failed'
-  | 'cancelled';
-
-export type WorkerPayoutStatus =
-  | 'created'
-  | 'processing'
-  | 'paid'
-  | 'failed'
-  | 'cancelled';
-
-export type WorkerEarningRow = {
-  id: string;
-  status: WorkerEarningStatus;
-  grossEarningsCents: number;
-  adjustmentsCents: number;
-  netEarningsCents: number;
-  currency: string;
-  approvedAt?: string;
-  availableForPayoutAt?: string;
-  createdAt?: string;
-  shiftId?: string;
-  bookingId?: string;
-  timesheetId?: string;
-  providerName?: string;
-  shiftRole?: string;
-};
-
-export type WorkerPayoutRow = {
-  id: string;
-  status: WorkerPayoutStatus;
-  amountCents: number;
-  currency: string;
-  paidAt?: string;
-  createdAt?: string;
-  lineCount?: number;
-};
-
-export type WorkerPayTotals = {
-  pendingCents: number;
-  approvedCents: number;
-  queuedCents: number;
-  paidCents: number;
-  heldCents: number;
-};
-
-/** Earnings grouped by ledger status for Worker Pay sections. */
-export type WorkerPayEarningsGroups = {
-  approved: WorkerEarningRow[];
-  queued: WorkerEarningRow[];
-  held: WorkerEarningRow[];
-  paid: WorkerEarningRow[];
-  pending: WorkerEarningRow[];
-  failed: WorkerEarningRow[];
-  cancelled: WorkerEarningRow[];
-};
-
-/** Payout batches grouped by status — `created` displays as Prepared in UI. */
-export type WorkerPayPayoutGroups = {
-  prepared: WorkerPayoutRow[];
-  processing: WorkerPayoutRow[];
-  paid: WorkerPayoutRow[];
-  failed: WorkerPayoutRow[];
-  cancelled: WorkerPayoutRow[];
-};
-
-/** Ledger status on `worker_payout_methods` (`0023`). */
-export type WorkerPayoutMethodStatus =
-  | 'pending'
-  | 'active'
-  | 'failed'
-  | 'inactive'
-  | 'removed';
-
-/** Worker Pay payout-method readiness (UI state, not processor execution). */
-export type WorkerPayoutMethodReadinessUiStatus =
-  | 'setup_not_connected'
-  | 'no_method'
-  | 'pending'
-  | 'active'
-  | 'failed'
-  | 'inactive'
-  | 'unknown';
-
-export type WorkerPayoutMethodReadiness = {
-  status: WorkerPayoutMethodReadinessUiStatus;
-  methodStatus?: WorkerPayoutMethodStatus;
-  processor?: string;
+  isReady: boolean;
+  providerId?: string;
+  displayLabel?: string;
   message: string;
-  actionLabel?: string;
-  actionDisabled: boolean;
-  isSetupConnected: boolean;
-  hasActiveMethod: boolean;
-};
-
-export type WorkerPayReadiness = {
-  earnings: WorkerEarningRow[];
-  payouts: WorkerPayoutRow[];
-  earningsByStatus: WorkerPayEarningsGroups;
-  payoutsByStatus: WorkerPayPayoutGroups;
-  totals: WorkerPayTotals;
-  payoutMethodReadiness: WorkerPayoutMethodReadiness;
-  isSupabaseBacked: boolean;
-  message?: string;
-};
-
-/** Admin queue row for approved timesheet earning generation. */
-export type AdminEarningGenerationRow = {
-  timesheetId: string;
-  bookingId?: string;
-  workerName?: string;
-  providerName?: string;
-  siteName?: string;
-  shiftStartsAt?: string;
-  timesheetStatus: string;
-  workerPayDisplay?: string;
-  hasWorkerRateSnapshot: boolean;
-  earningId?: string;
-  earningStatus?: WorkerEarningStatus;
-  canGenerate: boolean;
-  blockerReason?: string;
-};
-
-export type AdminEarningGenerationQueue = {
-  rows: AdminEarningGenerationRow[];
-  summary: {
-    approvedTimesheets: number;
-    readyToGenerate: number;
-    alreadyGenerated: number;
-    missingRateSnapshot: number;
-  };
-  isSupabaseBacked: boolean;
-  message?: string;
-};
-
-/** Result from generate_worker_earning_from_timesheet RPC (admin-only; wired to `/admin/payments`). */
-export type WorkerEarningGenerationResult = {
-  earningId: string;
-  timesheetId: string;
-  bookingId?: string;
-  shiftId?: string;
-  workerId?: string;
-  status: string;
-  grossEarningsCents?: number;
-  adjustmentsCents?: number;
-  netEarningsCents: number;
-  currency: string;
-  approvedMinutes?: number;
-  workerRateCentsSnapshot?: number;
-  idempotent?: boolean;
-  message: string;
-};
-
-/** Worker group eligible for payout batching (admin queue). */
-export type AdminPayoutBatchGroup = {
-  workerId: string;
-  workerName?: string;
-  earningCount: number;
-  amountCents: number;
-  currency: string;
-  earningIds: string[];
-};
-
-export type AdminPayoutBatchQueue = {
-  groupedByWorker: AdminPayoutBatchGroup[];
-  summary: {
-    readyEarnings: number;
-    workerCount: number;
-    totalEligibleCents: number;
-    createdPayouts: number;
-    queuedEarnings: number;
-  };
-  isSupabaseBacked: boolean;
-  message?: string;
-};
-
-/** Result from create_worker_payout_batch RPC (admin-only; wired to `/admin/payments`). */
-export type WorkerPayoutBatchResult = {
-  ok: boolean;
-  payoutCount: number;
-  earningCount: number;
-  workerCount: number;
-  totalAmountCents: number;
-  payoutIds: string[];
-  message: string;
-};
-
-/** Provider timesheets prep — booking-based readiness until timesheet rows are wired. */
-export type ProviderTimesheetReadinessStatus =
-  | 'pending_booking'
-  | 'pending_clock_events'
-  | 'pending_timesheet'
-  | 'pending_approval'
-  | 'simulated';
-
-/** Booking-backed timesheet readiness row (Supabase prep). */
-export type ProviderTimesheetBookingReadinessRow = {
-  bookingId: string;
-  shiftId: string;
-  workerId: string;
-  workerName: string;
-  shiftTitle: string;
-  siteName: string;
-  shiftDate: string;
-  status: ProviderTimesheetReadinessStatus;
-  statusLabel: string;
-  hours?: number;
-  missingItems: string[];
-  isSimulated: boolean;
-};
-
-export type ProviderTimesheetReadinessRow = {
-  id: string;
-  shiftId: string;
-  bookingId?: string;
-  workerId?: string;
-  shiftTitle: string;
-  siteName: string;
-  shiftDate: string;
-  workerName?: string;
-  hours?: number;
-  status: ProviderTimesheetReadinessStatus;
-  statusLabel: string;
-  isSimulated: boolean;
-  missingItems?: string[];
-};
-
-export type ProviderTimesheetReviewRow = {
-  timesheetId: string;
-  bookingId: string;
-  shiftId: string;
-  workerId: string;
-  workerName: string;
-  shiftTitle: string;
-  siteName: string;
-  shiftDate: string;
-  hours: number;
-  status: string;
-  submittedAt?: string;
-  approvedAt?: string;
-  isSupabaseBacked: boolean;
 };
 
 export type ProviderTimesheetReadinessSummary = {
-  pendingCount: number;
-  readyToApproveCount: number;
-  simulatedCount: number;
-  rows: ProviderTimesheetReadinessRow[];
-  submittedRows: ProviderTimesheetReviewRow[];
-  approvedRows: ProviderTimesheetReviewRow[];
-  disputedRows: ProviderTimesheetReviewRow[];
+  total: number;
+  approved: number;
+  submitted: number;
+  disputed: number;
+  missing: number;
+  estimatedApprovedAmount: number;
 };
 
-/** Provider settings — org/account context in Supabase mode; sensitive controls staged. */
+export type ProviderCompliancePacketRow = {
+  id: string;
+  shiftId: string;
+  shiftTitle: string;
+  siteId: string;
+  siteName: string;
+  shiftDate: string;
+  bookingId?: string;
+  timesheetId?: string;
+  packetId?: string;
+  status: string;
+  statusLabel: string;
+  missingItems?: string[];
+  isSimulated: boolean;
+  generatedAt?: string;
+  hasFile?: boolean;
+};
+
+export type ProviderCompliancePacketGenerationResult = {
+  packetId?: string;
+  timesheetId: string;
+  status: 'generated' | 'unsupported';
+  message: string;
+  generatedAt: string;
+};
+
 export type ProviderSettingsSummary = {
-  organizationName?: string;
-  organizationType?: string;
-  organizationStatus?: string;
-  memberRole?: string;
-  accountEmail?: string;
-  accountName?: string;
-  setupStatus: 'complete' | 'incomplete' | 'unknown';
-  isSupabaseBacked: boolean;
+  organizationName: string;
+  organizationType: string;
+  primaryContactName: string;
+  primaryContactEmail: string;
+  billingEmail: string;
+  paymentTerms: string;
+  invoiceFrequency: string;
+  autoPayEnabled: boolean;
+  notifyShiftActivity: boolean;
+  notifyTimesheetActivity: boolean;
+  notifyComplianceActivity: boolean;
+  isSupabaseBacked?: boolean;
 };
 
 export type ProviderSettingsActionResult = {
@@ -1179,220 +743,8 @@ export type ProviderSettingsActionResult = {
 };
 
 export type ProviderOrganizationSettingsUpdatePayload = {
-  organizationName?: string;
+  organizationName: string;
   organizationType?: string;
-};
-
-/** Admin read-only marketplace dashboard (Supabase). */
-export type AdminMarketplaceSummary = {
-  providerCount: number;
-  workerCount: number;
-  openShiftCount: number;
-  bookedShiftCount: number;
-  bookingCount: number;
-  submittedTimesheetCount: number;
-  approvedTimesheetCount: number;
-  invoiceDraftCount: number;
-  compliancePacketCount: number;
-  supportTicketCount: number;
-  credentialReviewCount: number;
-};
-
-export type AdminMarketplaceActivityRow = {
-  id: string;
-  type: string;
-  label: string;
-  status: string;
-  createdAt?: string;
-  href?: string;
-};
-
-export type AdminMarketplaceDashboardPayload = {
-  summary: AdminMarketplaceSummary;
-  activity: AdminMarketplaceActivityRow[];
-  isSupabaseBacked: boolean;
-};
-
-export type AdminCredentialReviewStatus =
-  | 'pending'
-  | 'verified'
-  | 'rejected'
-  | 'expired'
-  | 'expiring_soon'
-  | 'missing';
-
-export type AdminCredentialReviewRow = {
-  id: string;
-  workerId: string;
-  workerName: string;
-  workerEmail?: string;
-  credentialId: string;
-  credentialName: string;
-  status: AdminCredentialReviewStatus;
-  expiresAt?: string;
-  submittedAt?: string;
-  verifiedAt?: string;
-  verifiedBy?: string;
-  workerHeadline?: string;
-  workerLocation?: string;
-  isSupabaseBacked: boolean;
-};
-
-export type AdminCredentialReviewPayload = {
-  rows: AdminCredentialReviewRow[];
-  pendingCount: number;
-  verifiedCount: number;
-  rejectedCount: number;
-  expiredCount: number;
-  isSupabaseBacked: boolean;
-};
-
-export type AdminCredentialReviewActionResult = {
-  credentialId: string;
-  status: string;
-  message: string;
-  updatedAt?: string;
-};
-
-export type AdminSupportTicketStatus = 'open' | 'assigned' | 'resolved' | 'closed';
-
-export type AdminSupportTicketPriority = 'low' | 'normal' | 'high' | 'urgent';
-
-export type AdminSupportTicketRow = {
-  id: string;
-  requesterUserId: string;
-  requesterType: 'worker' | 'provider' | 'admin';
-  requesterLabel: string;
-  ticketType?: string;
-  subject?: string;
-  description?: string;
-  priority: AdminSupportTicketPriority;
-  status: AdminSupportTicketStatus;
-  relatedShiftId?: string;
-  relatedLine?: string;
-  createdAt: string;
-  updatedAt: string;
-  isSupabaseBacked: boolean;
-};
-
-export type AdminSupportTicketPayload = {
-  rows: AdminSupportTicketRow[];
-  openCount: number;
-  assignedCount: number;
-  resolvedCount: number;
-  closedCount: number;
-  urgentCount: number;
-  isSupabaseBacked: boolean;
-};
-
-export type AdminSupportTicketActionResult = {
-  ticketId: string;
-  status: string;
-  message: string;
-  updatedAt?: string;
-};
-
-export type AdminIncidentSeverity = 'low' | 'medium' | 'high' | 'critical';
-
-export type AdminIncidentStatus =
-  | 'open'
-  | 'under_review'
-  | 'awaiting_statement'
-  | 'resolved'
-  | 'escalated';
-
-export type AdminIncidentRow = {
-  id: string;
-  source: 'incident' | 'safety_report';
-  title: string;
-  summary?: string;
-  severity: AdminIncidentSeverity;
-  status: AdminIncidentStatus;
-  incidentType?: string;
-  workerId?: string;
-  providerId?: string;
-  siteId?: string;
-  shiftId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  isSupabaseBacked: boolean;
-  /** Display-only when joins succeed */
-  workerLabel?: string;
-  providerLabel?: string;
-  shiftLabel?: string;
-};
-
-export type AdminIncidentQueuePayload = {
-  rows: AdminIncidentRow[];
-  openCount: number;
-  criticalCount: number;
-  escalatedCount: number;
-  isSupabaseBacked: boolean;
-};
-
-/** Admin worker/bill rate review queue (read-only; Supabase). */
-export type AdminWorkerRateReviewStatus =
-  | 'missing_worker_rate'
-  | 'missing_bill_rate'
-  | 'rate_ready'
-  | 'locked';
-
-export type AdminWorkerRateReviewRow = {
-  id: string;
-  shiftId: string;
-  providerId?: string;
-  providerName?: string;
-  siteName?: string;
-  role: string;
-  status: AdminWorkerRateReviewStatus;
-  startsAt?: string;
-  billRateCents?: number;
-  workerRateCents?: number;
-  currency: string;
-  rateType: string;
-  shiftStatus?: string;
-  isUrgent?: boolean;
-  createdAt?: string;
-  ratesLockedAt?: string;
-  ratesUpdatedAt?: string;
-  isSupabaseBacked: boolean;
-};
-
-export type AdminWorkerRateReviewQueue = {
-  rows: AdminWorkerRateReviewRow[];
-  summary: {
-    missingWorkerRate: number;
-    missingBillRate: number;
-    ready: number;
-    locked: number;
-  };
-  isSupabaseBacked: boolean;
-  message?: string;
-};
-
-/** Result from audited admin rate RPCs (Supabase). */
-export type AdminRateActionResult = {
-  shiftId: string;
-  billRateCents?: number;
-  workerRateCents?: number;
-  ratesLockedAt?: string;
-  ratesUpdatedAt?: string;
-  message: string;
-};
-
-export type AdminSetWorkerRatePayload = {
-  shiftId: string;
-  workerRateCents: number;
-  reason: string;
-};
-
-export type AdminUpdateBillRatePayload = {
-  shiftId: string;
-  billRateCents: number;
-  reason: string;
-};
-
-export type AdminRateLockPayload = {
-  shiftId: string;
-  reason: string;
+  primaryContactName?: string;
+  primaryContactEmail?: string;
 };
