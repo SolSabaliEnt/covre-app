@@ -10,6 +10,15 @@ export type ProviderShiftInvitation = {
   createdAt: string;
 };
 
+export type ProviderInvitableShift = {
+  id: string;
+  title: string;
+  role: string;
+  siteName: string;
+  startsAt: string;
+  endsAt: string;
+};
+
 function ok<T>(data: T): ApiResult<T> {
   return { ok: true, data };
 }
@@ -49,6 +58,37 @@ async function currentProviderId(): Promise<ApiResult<string>> {
   if (error) return fail('provider_membership_load', friendlyDbMessage(error, 'Unable to load provider membership.'));
   if (!data?.provider_id) return fail('provider_required', 'Join or create a provider organization first.');
   return ok(data.provider_id as string);
+}
+
+export async function listProviderInvitableShiftsFromSupabase(): Promise<
+  ApiResult<ProviderInvitableShift[]>
+> {
+  const provider = await currentProviderId();
+  if (!provider.ok) return provider;
+
+  const { data, error } = await getSupabaseClient()
+    .from('shifts')
+    .select('id, title, role, starts_at, ends_at, care_sites(name)')
+    .eq('provider_id', provider.data)
+    .eq('status', 'open')
+    .gt('starts_at', new Date().toISOString())
+    .order('starts_at', { ascending: true });
+
+  if (error) return fail('invitable_shifts_load', friendlyDbMessage(error, 'Unable to load open shifts.'));
+
+  return ok(
+    (data ?? []).map(row => {
+      const site = Array.isArray(row.care_sites) ? row.care_sites[0] : row.care_sites;
+      return {
+        id: row.id as string,
+        title: ((row.title as string | null) ?? (row.role as string | null) ?? 'Open shift').trim(),
+        role: ((row.role as string | null) ?? 'Care worker').trim(),
+        siteName: ((site as { name?: string } | null)?.name ?? 'Care site').trim(),
+        startsAt: row.starts_at as string,
+        endsAt: row.ends_at as string,
+      };
+    }),
+  );
 }
 
 export async function createProviderShiftInvitationInSupabase(
