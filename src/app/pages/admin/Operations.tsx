@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   ClipboardCheck,
   HeartHandshake,
+  MousePointerClick,
   Network,
   Repeat2,
   Users,
@@ -13,8 +14,10 @@ import { useAsyncResource } from '../../hooks/useAsyncResource';
 import {
   getAdminContinuitySummary,
   getAdminMarketplaceDashboard,
+  getContinuityTelemetrySummary,
   type AdminContinuitySummary,
   type AdminMarketplaceSummary,
+  type ContinuityTelemetrySummary,
 } from '../../services';
 import { isSupabaseBackendEnabled } from '../../lib/backendMode';
 
@@ -154,10 +157,65 @@ function ContinuitySignals({ summary }: { summary: AdminContinuitySummary }) {
   );
 }
 
+function ExperimentSignals({ summary }: { summary: ContinuityTelemetrySummary }) {
+  return (
+    <section>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-[#13334F]">Continuity experiment</h2>
+          <p className="mt-1 max-w-4xl text-sm text-[#607583]">
+            Are the new continuity surfaces changing behavior? This first telemetry seam records only small
+            product-event context such as shift/site IDs and counts—no message contents or sensitive profile data.
+          </p>
+        </div>
+        <span className="rounded-full bg-[#E8EEF2] px-3 py-1 text-xs font-semibold text-[#607583]">
+          Preview telemetry · this browser
+        </span>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Familiar impressions"
+          value={summary.familiarOpportunityImpressions}
+          detail={`${summary.familiarOpportunityOpenRatePct}% opened from a surfaced familiar opportunity`}
+          icon={Activity}
+          accent
+        />
+        <MetricCard
+          label="Familiar opens"
+          value={summary.familiarOpportunityOpens}
+          detail={`${summary.familiarShiftDetailViews} familiar shift-detail views recorded`}
+          icon={MousePointerClick}
+          accent
+        />
+        <MetricCard
+          label="Familiar applications"
+          value={summary.familiarShiftApplications}
+          detail={`${summary.familiarApplicationRatePct}% of familiar detail views led to an application event`}
+          icon={CalendarCheck}
+          accent
+        />
+        <MetricCard
+          label="Return preferences"
+          value={summary.returnPreferencesSaved}
+          detail={`${summary.providerRebookActions} provider rebook actions · ${summary.providerReturnIntents} return intents`}
+          icon={HeartHandshake}
+          accent
+        />
+      </div>
+
+      <p className="mt-3 text-xs text-[#9AAAB3]">
+        This is not cross-user production analytics yet. Events are capped and stored locally until Covre has an approved analytics persistence contract.
+      </p>
+    </section>
+  );
+}
+
 export default function AdminOperations() {
   const supabaseMode = isSupabaseBackendEnabled();
   const marketplace = useAsyncResource(() => getAdminMarketplaceDashboard(), []);
   const continuity = useAsyncResource(() => getAdminContinuitySummary(), []);
+  const experiment = getContinuityTelemetrySummary();
 
   const loading = marketplace.loading || continuity.loading;
   const error = marketplace.error ?? continuity.error;
@@ -198,7 +256,7 @@ export default function AdminOperations() {
       <main className="mx-auto max-w-7xl space-y-8 p-6">
         {!supabaseMode ? (
           <div className="rounded-xl border border-[#DDE7E8] bg-[#E8EEF2] px-4 py-3 text-sm text-[#607583]">
-            Mock mode is active. Metrics below are demo values used to exercise the control-center experience.
+            Mock mode is active. Marketplace metrics are demo values; experiment telemetry below reflects actions in this browser.
           </div>
         ) : null}
 
@@ -233,6 +291,8 @@ export default function AdminOperations() {
             {continuity.data ? <ContinuitySignals summary={continuity.data} /> : null}
           </>
         )}
+
+        <ExperimentSignals summary={experiment} />
 
         <section className="rounded-2xl border border-[#DDE7E8] bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
