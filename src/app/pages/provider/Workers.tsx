@@ -1,8 +1,14 @@
 import { Link } from 'react-router';
 import { ArrowRight, Calendar, Heart, History, Repeat2, Users } from 'lucide-react';
-import { getProviderBench, listProviderShifts, trackContinuityEvent } from '../../services';
+import {
+  getProviderBench,
+  listCurrentProviderWorkerContinuity,
+  listProviderShifts,
+  trackContinuityEvent,
+} from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import type { ProviderBenchWorker } from '../../services/types';
+import type { ProviderWorkerContinuity } from '../../services/continuityService';
 
 function relationshipCount(worker: ProviderBenchWorker): number {
   return worker.completedShiftCount ?? worker.shifts ?? 0;
@@ -25,16 +31,43 @@ function buildKnownWorkers(sections: { workers: ProviderBenchWorker[] }[]): Prov
     .sort((a, b) => relationshipCount(b) - relationshipCount(a));
 }
 
+function mergeCanonicalContinuity(
+  workers: ProviderBenchWorker[],
+  continuity: ProviderWorkerContinuity[] | undefined,
+  useCanonical: boolean,
+): ProviderBenchWorker[] {
+  if (!useCanonical) return workers;
+  const byWorker = new Map((continuity ?? []).map(row => [row.workerId, row]));
+
+  return workers
+    .map(worker => {
+      const row = byWorker.get(worker.id);
+      return {
+        ...worker,
+        completedShiftCount: row?.approvedShiftCount ?? 0,
+        lastWorkedAt: row?.lastWorkedLabel,
+      };
+    })
+    .filter(worker => (worker.completedShiftCount ?? 0) > 0)
+    .sort((a, b) => (b.completedShiftCount ?? 0) - (a.completedShiftCount ?? 0));
+}
+
 export default function ProviderWorkers() {
   const { data: shifts, loading: shiftsLoading } = useAsyncResource(() => listProviderShifts(), []);
   const { data: bench, loading: benchLoading } = useAsyncResource(() => getProviderBench(), []);
+  const { data: canonicalContinuity, loading: continuityLoading } = useAsyncResource(
+    () => listCurrentProviderWorkerContinuity(),
+    [],
+  );
 
   const openShifts =
     shifts?.filter(s => s.providerBoardStatus === 'urgent' || s.providerBoardStatus === 'pending') ?? [];
   const matchTargets = openShifts.slice(0, 5);
-  const knownWorkers = buildKnownWorkers(bench?.sections ?? []).slice(0, 6);
-  const repeatWorkers = knownWorkers.filter(worker => relationshipCount(worker) > 1);
   const isSupabase = Boolean(bench?.isSupabaseBacked);
+  const benchWorkers = buildKnownWorkers(bench?.sections ?? []);
+  const knownWorkers = mergeCanonicalContinuity(benchWorkers, canonicalContinuity, isSupabase).slice(0, 6);
+  const repeatWorkers = knownWorkers.filter(worker => relationshipCount(worker) > 1);
+  const historyLoading = benchLoading || (isSupabase && continuityLoading);
 
   return (
     <div className="min-h-full w-full min-w-0 max-w-full bg-[#F7FAFA] px-4 py-6">
@@ -53,13 +86,13 @@ export default function ProviderWorkers() {
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-[#13334F]">Your organization is building working history.</p>
               <p className="mt-1 text-sm leading-relaxed text-[#607583]">
-                {benchLoading
+                {historyLoading
                   ? 'Loading the workers you already know…'
                   : repeatWorkers.length > 0
-                    ? `${repeatWorkers.length} ${repeatWorkers.length === 1 ? 'worker has' : 'workers have'} more than one booking relationship with your organization.`
+                    ? `${repeatWorkers.length} ${repeatWorkers.length === 1 ? 'worker has' : 'workers have'} more than one approved shift with your organization.`
                     : knownWorkers.length > 0
-                      ? 'You have workers with prior booking history. Repeat relationships will become more visible as you work together again.'
-                      : 'Once you book workers, Covre will keep those relationships visible instead of treating every shift like a first meeting.'}
+                      ? 'You have workers with approved work history. Repeat relationships will become more visible as you work together again.'
+                      : 'Once approved work exists, Covre will keep those relationships visible instead of treating every shift like a first meeting.'}
               </p>
             </div>
           </div>
@@ -73,7 +106,7 @@ export default function ProviderWorkers() {
                 <h2 className="mt-1 text-lg font-semibold text-[#13334F]">Repeat-worker memory</h2>
                 <p className="mt-1 text-sm leading-relaxed text-[#607583]">
                   {isSupabase
-                    ? 'Based on confirmed, accepted, or completed bookings with your organization.'
+                    ? 'Based on approved work from Covre’s canonical continuity model.'
                     : 'Preview relationships derived from the provider demo history.'}
                 </p>
               </div>
@@ -115,11 +148,11 @@ export default function ProviderWorkers() {
                           ) : null}
                         </div>
                         <p className="mt-1 text-sm text-[#607583]">{worker.roleLabel ?? 'Care worker'}</p>
-                        {worker.lastWorkedAt ? <p className="mt-1 text-xs text-[#9AAAB3]">Last booked {worker.lastWorkedAt}</p> : null}
+                        {worker.lastWorkedAt ? <p className="mt-1 text-xs text-[#9AAAB3]">Last approved work {worker.lastWorkedAt}</p> : null}
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-2xl font-semibold text-[#13334F]">{count}</p>
-                        <p className="text-xs text-[#607583]">bookings together</p>
+                        <p className="text-xs text-[#607583]">approved shifts together</p>
                       </div>
                     </div>
 
