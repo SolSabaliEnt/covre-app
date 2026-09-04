@@ -63,11 +63,11 @@ export function AdminPreviewFrame({
 
           <div className="overflow-hidden rounded-[28px] border border-[#CBD9DC] bg-white shadow-[0_18px_50px_rgba(19,51,79,0.16)] ring-1 ring-white">
             <div
-              className="h-[760px] overflow-x-hidden overflow-y-auto overscroll-contain bg-[#F7FAFA]"
+              className="h-[844px] overflow-x-hidden overflow-y-auto overscroll-contain bg-[#F7FAFA]"
               aria-label={`${audience} app mobile viewport`}
             >
               <div
-                className="pointer-events-none min-h-full select-none"
+                className="pointer-events-none h-full min-h-full select-none"
                 aria-label={`${audience} app read-only preview`}
               >
                 {children}
