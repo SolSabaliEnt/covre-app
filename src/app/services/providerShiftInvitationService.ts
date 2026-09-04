@@ -115,6 +115,16 @@ export async function listWorkerShiftInvitations(): Promise<ApiResult<WorkerShif
   );
 }
 
+/** Mock-only bridge used by provider review so the preview can demonstrate invite → accept → confirm. */
+export async function listMockProviderShiftInvitationsForReview(
+  shiftId: string,
+): Promise<ApiResult<WorkerShiftInvitation[]>> {
+  if (getBackendMode() === 'supabase') {
+    return { ok: true, data: [] };
+  }
+  return mockRequest(() => readMockInvitations().filter(invitation => invitation.shiftId === shiftId));
+}
+
 export async function respondToWorkerShiftInvitation(
   invitationId: string,
   decision: WorkerShiftInvitationDecision,
