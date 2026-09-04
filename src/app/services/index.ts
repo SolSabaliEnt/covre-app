@@ -18,6 +18,7 @@ export * from './continuityTelemetryService';
 export * from './providerService';
 export * from './providerWorkerProfileService';
 export * from './providerWorkerRelationshipService';
+export * from './providerShiftInvitationService';
 export {
   saveWorkerToProviderBench as addWorkerToBench,
   saveWorkerDoNotSend as markWorkerDoNotSend,
