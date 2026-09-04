@@ -73,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     mockAuthStore.getSnapshot,
   )
   const [supabaseSession, setSupabaseSession] = useState<AuthSession>({
+    name: "",
     isAuthenticated: false,
     isLoading: backendMode === "supabase",
   })
@@ -116,8 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mockAuthStore.logout()
       return
     }
-    void supabaseAuthAdapter.signOut().then(() => {
-      setSupabaseSession({ isAuthenticated: false, isLoading: false })
+    void supabaseAuthAdapter.logout().then(() => {
+      setSupabaseSession({ name: "", isAuthenticated: false, isLoading: false })
     })
   }, [backendMode])
 
