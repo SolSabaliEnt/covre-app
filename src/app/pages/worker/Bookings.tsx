@@ -119,16 +119,12 @@ function BookingCard({
           </p>
           <button
             type="button"
-            disabled={supabaseMode || returnPreferenceSaved || returnPreferencePending}
+            disabled={returnPreferenceSaved || returnPreferencePending}
             onClick={onSaveReturnPreference}
             className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#BFDCD5] bg-white px-3 py-2 text-sm font-semibold text-[#257665] transition-colors hover:bg-[#E6F6F2] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Heart className="h-4 w-4" aria-hidden />
-            {supabaseMode
-              ? 'Return preference coming soon'
-              : returnPreferenceSaved
-                ? 'Saved: I’d work here again'
-                : 'I’d work here again'}
+            {returnPreferenceSaved ? 'Saved: I’d work here again' : 'I’d work here again'}
           </button>
         </div>
       ) : null}
