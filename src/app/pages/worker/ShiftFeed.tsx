@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ShiftCard } from '../../components/ShiftCard';
 import { WorkerShiftMap } from '../../components/WorkerShiftMap';
 import { Link } from 'react-router';
-import { Bookmark, Shield, Settings } from 'lucide-react';
+import { Bookmark, Repeat2, Shield, Settings, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   listWorkerBookings,
@@ -107,13 +107,38 @@ export default function ShiftFeed() {
     setSelectedShiftId(undefined);
   }, [shifts]);
 
-  const visibleShifts = useMemo(
-    () =>
-      (shifts ?? []).filter(
-        shift => !previouslyWorkedOnly || Boolean(getSiteContinuity(continuity, shift.siteId)),
-      ),
-    [shifts, previouslyWorkedOnly, continuity],
-  );
+  const familiarOpportunity = useMemo(() => {
+    const familiar = (shifts ?? [])
+      .map(shift => ({ shift, history: getSiteContinuity(continuity, shift.siteId) }))
+      .filter(
+        (row): row is { shift: NonNullable<typeof shifts>[number]; history: NonNullable<typeof row.history> } =>
+          Boolean(row.history) && (!row.shift.workerShiftReadiness || row.shift.workerShiftReadiness.isReady),
+      );
+
+    familiar.sort((a, b) => {
+      const historyDifference = b.history.completedShifts - a.history.completedShifts;
+      if (historyDifference !== 0) return historyDifference;
+      return (a.shift.distanceNumericMiles ?? Number.POSITIVE_INFINITY) -
+        (b.shift.distanceNumericMiles ?? Number.POSITIVE_INFINITY);
+    });
+
+    return familiar[0];
+  }, [shifts, continuity]);
+
+  const visibleShifts = useMemo(() => {
+    const filtered = (shifts ?? []).filter(
+      shift => !previouslyWorkedOnly || Boolean(getSiteContinuity(continuity, shift.siteId)),
+    );
+
+    // Continuity is a discovery signal, not a hard marketplace rule. Promote one strong familiar
+    // opportunity to the top while preserving the service-provided order for everything else.
+    if (!familiarOpportunity) return filtered;
+    const promotedIndex = filtered.findIndex(shift => shift.id === familiarOpportunity.shift.id);
+    if (promotedIndex <= 0) return filtered;
+
+    const promoted = filtered[promotedIndex];
+    return [promoted, ...filtered.slice(0, promotedIndex), ...filtered.slice(promotedIndex + 1)];
+  }, [shifts, previouslyWorkedOnly, continuity, familiarOpportunity]);
 
   return (
     <div className="min-h-[100svh] w-full max-w-full overflow-x-hidden bg-[#F7FAFA] px-4 py-6 text-[#10283D]">
@@ -225,6 +250,43 @@ export default function ShiftFeed() {
         </div>
       </div>
 
+      {!loading && !error && familiarOpportunity && viewMode === 'list' && !previouslyWorkedOnly && (
+        <div className="mx-4 mt-4 overflow-hidden rounded-2xl border border-[#BFDCD5] bg-[#E6F6F2] shadow-sm">
+          <div className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#257665]">
+                <Sparkles className="h-5 w-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#257665]">
+                  Familiar opportunity
+                </p>
+                <p className="mt-1 text-base font-semibold text-[#13334F]">
+                  {familiarOpportunity.shift.siteName} already knows your work.
+                </p>
+                <p className="mt-1 text-sm leading-5 text-[#607583]">
+                  You have completed {familiarOpportunity.history.completedShifts} {familiarOpportunity.history.completedShifts === 1 ? 'shift' : 'shifts'} here. Familiarity is one reason Covre is surfacing this opportunity — alongside pay, readiness, and distance.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-4 border-t border-[#BFDCD5] pt-4">
+              <div className="min-w-0">
+                <p className="font-semibold text-[#13334F]">{displayWorkerPay(familiarOpportunity.shift)}</p>
+                <p className="text-xs text-[#607583]">
+                  {familiarOpportunity.shift.dateLabel} · {familiarOpportunity.shift.distanceMiles}
+                </p>
+              </div>
+              <Link
+                to={`/worker/shift/${familiarOpportunity.shift.id}`}
+                className="shrink-0 rounded-xl bg-[#13334F] px-4 py-2.5 text-sm font-semibold text-white no-underline hover:bg-[#0B243A]"
+              >
+                View shift
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {supabaseMode && (
         <p className="mx-4 mt-4 text-xs text-[#9AAAB3]">
           Real open shifts from Covre. Apply from shift detail; save and calendar stay simulated.
@@ -282,6 +344,7 @@ export default function ShiftFeed() {
             <div className="space-y-4">
               {visibleShifts.map(shift => {
                 const siteHistory = getSiteContinuity(continuity, shift.siteId);
+                const isRegularPlace = (siteHistory?.completedShifts ?? 0) >= 5;
                 return (
                   <div key={shift.id} className="min-w-0 max-w-full">
                     <ShiftCard
@@ -310,11 +373,17 @@ export default function ShiftFeed() {
                     >
                       {siteHistory && (
                         <div className="mt-3 border-t border-[#DDE7E8] pt-3 text-xs">
-                          <span className="font-semibold text-[#257665]">
-                            Worked here {siteHistory.completedShifts}×
-                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#E6F6F2] px-2.5 py-1 font-semibold text-[#257665]">
+                              <Repeat2 className="h-3.5 w-3.5" aria-hidden />
+                              {isRegularPlace ? 'One of your regular places' : 'Familiar place'}
+                            </span>
+                            <span className="font-semibold text-[#257665]">
+                              Worked here {siteHistory.completedShifts}×
+                            </span>
+                          </div>
                           {siteHistory.lastWorkedLabel && (
-                            <span className="ml-2 text-[#607583]">Last: {siteHistory.lastWorkedLabel}</span>
+                            <p className="mt-2 text-[#607583]">Last here: {siteHistory.lastWorkedLabel}</p>
                           )}
                         </div>
                       )}
