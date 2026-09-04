@@ -193,7 +193,7 @@ export default function Bench() {
 
   if (loading) return <LoadingBlock />;
   if (error || !data) {
-    return <ErrorBlock message={error ?? 'Unable to load bench.'} onRetry={reload} />;
+    return <ErrorBlock message={error?.message ?? 'Unable to load bench.'} onRetry={reload} />;
   }
 
   const isSupabase = data.isSupabaseBacked;
