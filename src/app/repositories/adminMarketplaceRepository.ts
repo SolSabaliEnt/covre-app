@@ -15,6 +15,10 @@ function ok<T>(data: T): ApiResult<T> {
   return { ok: true, data }
 }
 
+function countValue(result: ApiResult<number>): number {
+  return result.ok ? result.data : 0
+}
+
 function friendlyDbMessage(err: { message?: string }, fallback: string): string {
   const raw = err.message ?? fallback
   if (/row-level security|RLS|permission denied|42501/i.test(raw)) {
@@ -144,17 +148,17 @@ export async function getAdminMarketplaceDashboardFromSupabase(): Promise<
     }
 
     const summary: AdminMarketplaceSummary = {
-      providerCount: providerCount.data,
-      workerCount: workerCount.data,
-      openShiftCount: openShiftCount.data,
-      bookedShiftCount: bookedShiftCount.data,
-      bookingCount: bookingCount.data,
-      submittedTimesheetCount: submittedTimesheetCount.data,
-      approvedTimesheetCount: approvedTimesheetCount.data,
-      invoiceDraftCount: invoiceDraftCount.data,
-      compliancePacketCount: compliancePacketCount.data,
-      supportTicketCount: supportTicketCount.data,
-      credentialReviewCount: credentialReviewCount.data,
+      providerCount: countValue(providerCount),
+      workerCount: countValue(workerCount),
+      openShiftCount: countValue(openShiftCount),
+      bookedShiftCount: countValue(bookedShiftCount),
+      bookingCount: countValue(bookingCount),
+      submittedTimesheetCount: countValue(submittedTimesheetCount),
+      approvedTimesheetCount: countValue(approvedTimesheetCount),
+      invoiceDraftCount: countValue(invoiceDraftCount),
+      compliancePacketCount: countValue(compliancePacketCount),
+      supportTicketCount: countValue(supportTicketCount),
+      credentialReviewCount: countValue(credentialReviewCount),
     }
 
     const activityCandidates: { at: string; row: AdminMarketplaceActivityRow }[] = []
