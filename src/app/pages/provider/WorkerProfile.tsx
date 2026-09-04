@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { ArrowLeft, MapPin, Shield, Star, Building2, ClipboardList, StickyNote } from 'lucide-react';
+import { ArrowLeft, MapPin, Shield, Star, Building2, ClipboardList, StickyNote, Repeat2 } from 'lucide-react';
 import { StatusBadge } from '../../components/StatusBadge';
 import { addWorkerToBench, getProviderWorkerProfile, inviteWorkerToShift, markWorkerDoNotSend } from '../../services';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
@@ -51,6 +51,11 @@ export default function WorkerProfile() {
     setInviteDone(false);
     setDnsDone(false);
   }, [workerId]);
+
+  const shiftsTogether =
+    profile?.siteFamiliarity.reduce((total, site) => total + site.shiftCount, 0) ?? 0;
+  const repeatPlaces = profile?.siteFamiliarity.filter(site => site.shiftCount > 1).length ?? 0;
+  const strongestSite = profile?.siteFamiliarity[0];
 
   if (!workerId) {
     return (
@@ -105,6 +110,52 @@ export default function WorkerProfile() {
             </header>
 
             <section>
+              <SectionTitle>Your history with {profile.name}</SectionTitle>
+              <div className="rounded-2xl border border-[#BFDCD5] bg-[#E6F6F2] p-4 shadow-sm">
+                {shiftsTogether > 0 ? (
+                  <>
+                    <div className="flex items-start gap-3">
+                      <Repeat2 className="mt-0.5 h-5 w-5 shrink-0 text-[#257665]" aria-hidden />
+                      <div>
+                        <p className="font-semibold text-[#13334F]">
+                          You are not starting from zero with this worker.
+                        </p>
+                        <p className="mt-1 text-sm leading-relaxed text-[#607583]">
+                          {profile.name} has completed {shiftsTogether} {shiftsTogether === 1 ? 'shift' : 'shifts'} across your care sites.
+                          {strongestSite ? ` ${strongestSite.siteName} is the place you know each other best.` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#BFDCD5] pt-4">
+                      <div>
+                        <p className="text-xl font-semibold text-[#13334F]">{shiftsTogether}</p>
+                        <p className="text-xs text-[#607583]">shifts together</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-semibold text-[#13334F]">{repeatPlaces}</p>
+                        <p className="text-xs text-[#607583]">repeat places</p>
+                      </div>
+                      <div>
+                        <p className="text-xl font-semibold text-[#13334F]">{strongestSite?.shiftCount ?? 0}</p>
+                        <p className="text-xs text-[#607583]">at top site</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <Repeat2 className="mt-0.5 h-5 w-5 shrink-0 text-[#257665]" aria-hidden />
+                    <div>
+                      <p className="font-semibold text-[#13334F]">New relationship</p>
+                      <p className="mt-1 text-sm text-[#607583]">
+                        No completed shifts together yet. Covre will preserve the history as you work together.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section>
               <SectionTitle>Credentials</SectionTitle>
               <div className="rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
                 <ul className="space-y-2">
@@ -141,10 +192,10 @@ export default function WorkerProfile() {
             </section>
 
             <section>
-              <SectionTitle>Site familiarity</SectionTitle>
+              <SectionTitle>Places you&apos;ve worked together</SectionTitle>
               <div className="rounded-xl border border-[#DDE7E8] bg-white p-4 shadow-sm">
                 {profile.siteFamiliarity.length === 0 ? (
-                  <p className="text-sm text-[#607583]">No completed assignments in-network yet.</p>
+                  <p className="text-sm text-[#607583]">No completed assignments together yet.</p>
                 ) : (
                   <ul className="space-y-3">
                     {profile.siteFamiliarity.map(s => (
