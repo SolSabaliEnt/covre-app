@@ -23,7 +23,14 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseAnonKey!)
   : null
 
-export function getSupabaseClient(): SupabaseClient {
+/**
+ * Covre does not yet commit generated Supabase Database types. Keep that missing schema contract
+ * explicit at this single boundary instead of pretending PostgREST relationship inference is
+ * authoritative throughout repositories. Repository DTOs remain the checked application boundary.
+ * Replace `any` with `SupabaseClient<Database>` when generated Covre schema types are committed.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getSupabaseClient(): any {
   if (!isSupabaseConfigured || supabase === null) {
     throw new Error(
       "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."

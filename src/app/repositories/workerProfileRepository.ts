@@ -89,7 +89,7 @@ async function requireSession() {
     data: { session },
   } = await supabase.auth.getSession()
   if (!session?.user) {
-    return { supabase, session: null as const }
+    return { supabase, session: null }
   }
   return { supabase, session }
 }

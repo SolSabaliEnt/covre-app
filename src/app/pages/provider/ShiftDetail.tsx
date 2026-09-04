@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, Building2, Calendar, DollarSign, Shield, User } from 'lucide-react';
 import { StatusBadge } from '../../components/StatusBadge';
 import {
   acceptProviderShiftApplicant,
   getProviderShift,
-  listProviderShiftApplicants,
+  listProviderShiftApplicantReview,
 } from '../../services';
-import type { ProviderShiftApplicant } from '../../services/types';
+import type { ProviderShiftApplicantReview } from '../../services/providerApplicantReviewTypes';
 import type { Shift } from '../../data/types';
 import { useAsyncResource } from '../../hooks/useAsyncResource';
 import { useProviderAction } from '../../hooks/useProviderAction';
@@ -33,18 +34,23 @@ function boardBadge(shift: Shift) {
   return { variant: 'pending' as const, label: 'Pending' };
 }
 
-function formatApplicantStatus(status: ProviderShiftApplicant['status']): string {
-  switch (status) {
-    case 'requested':
-      return 'Requested';
+function reviewBadge(applicant: ProviderShiftApplicantReview) {
+  switch (applicant.reviewState) {
+    case 'invited_accepted':
+      return { variant: 'covered' as const, label: 'Invited · worker accepted' };
+    case 'invited':
+      return { variant: 'preferred' as const, label: 'Invited · awaiting worker' };
+    case 'booked':
+      return { variant: 'covered' as const, label: 'Booked · coverage secured' };
+    case 'covered_elsewhere':
+      return { variant: 'new' as const, label: 'Closed · coverage secured' };
     case 'withdrawn':
-      return 'Withdrawn';
-    case 'accepted':
-      return 'Accepted';
-    case 'rejected':
-      return 'Declined';
+      return { variant: 'new' as const, label: 'Withdrawn' };
+    case 'declined':
+      return { variant: 'new' as const, label: applicant.invitation ? 'Invitation declined' : 'Declined' };
+    case 'applied':
     default:
-      return status;
+      return { variant: 'pending' as const, label: 'Applied' };
   }
 }
 
@@ -61,6 +67,19 @@ function formatSubmittedAt(iso?: string): string | null {
   });
 }
 
+function invitationResolutionLine(applicant: ProviderShiftApplicantReview): string | null {
+  const invitation = applicant.invitation;
+  if (!invitation) return null;
+  if (invitation.resolutionReason === 'booked') return ' · this invitation led to the booked coverage';
+  if (invitation.resolutionReason === 'shift_covered_elsewhere') {
+    return ' · worker accepted, but coverage was secured with someone else';
+  }
+  if (invitation.resolutionReason === 'shift_covered') return ' · closed automatically when coverage was secured';
+  if (invitation.status === 'accepted') return ' · worker explicitly accepted this invitation';
+  if (invitation.status === 'pending' || invitation.status === 'viewed') return ' · waiting for worker response';
+  return ` · ${invitation.status}`;
+}
+
 function ApplicationsSection({
   shiftId,
   onBookingCreated,
@@ -70,112 +89,155 @@ function ApplicationsSection({
 }) {
   const supabaseMode = isSupabaseBackendEnabled();
   const { run, isPending } = useProviderAction();
+  const [locallyBookedRequestIds, setLocallyBookedRequestIds] = useState<Record<string, boolean>>({});
   const { data, error, loading, reload } = useAsyncResource(
-    () =>
-      supabaseMode
-        ? listProviderShiftApplicants(shiftId)
-        : Promise.resolve({
-            ok: true as const,
-            data: { shiftId, applicants: [], isReadOnly: true },
-          }),
+    () => listProviderShiftApplicantReview(shiftId),
     [shiftId, supabaseMode],
   );
 
-  if (!supabaseMode) {
-    return null;
-  }
-
   if (loading) {
     return (
-      <Section title="Applications">
-        <p className="text-sm text-[#607583]">Loading applications…</p>
+      <Section title="Applications & invitations">
+        <p className="text-sm text-[#607583]">Loading worker responses…</p>
       </Section>
     );
   }
 
   if (error) {
     return (
-      <Section title="Applications">
+      <Section title="Applications & invitations">
         <p className="text-sm text-[#607583]">{error.message}</p>
       </Section>
     );
   }
 
   const applicants = data?.applicants ?? [];
-  const hasAccepted = applicants.some(a => a.status === 'accepted');
+  const hasBooked = applicants.some(
+    applicant => applicant.reviewState === 'booked' || Boolean(applicant.requestId && locallyBookedRequestIds[applicant.requestId]),
+  );
+  const acceptedInvites = applicants.filter(applicant => applicant.reviewState === 'invited_accepted').length;
 
   return (
-    <Section title="Applications">
-      <p className="mb-4 text-sm text-[#607583]">
-        {hasAccepted
-          ? 'Booking created. The worker sees this shift under Bookings.'
-          : 'Review applications below. Accepting creates a booking and marks the shift booked.'}
+    <Section title="Applications & invitations">
+      <p className="mb-4 text-sm leading-6 text-[#607583]">
+        {hasBooked
+          ? 'Coverage is secured. Covre closes competing pending applications and invitations while preserving the worker-response history.'
+          : acceptedInvites > 0
+            ? `${acceptedInvites} invited ${acceptedInvites === 1 ? 'worker has' : 'workers have'} accepted. Confirming below uses Covre’s existing booking transaction.`
+            : 'Applications and provider invitations are shown together. An invitation is not a booking until the worker accepts and you confirm coverage.'}
       </p>
+
       {applicants.length === 0 ? (
-        <p className="text-sm text-[#607583]">No applications yet.</p>
+        <p className="text-sm text-[#607583]">No applications or invitations yet.</p>
       ) : (
         <ul className="space-y-3">
-          {applicants.map(applicant => (
-            <li
-              key={applicant.requestId}
-              className="rounded-xl border border-[#DDE7E8] bg-[#F7FAFA] p-4"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium text-[#13334F]">{applicant.workerName}</p>
-                  {applicant.workerRole ? (
-                    <p className="mt-0.5 text-sm text-[#607583]">{applicant.workerRole}</p>
-                  ) : null}
-                  {applicant.workerLocation ? (
-                    <p className="mt-0.5 text-xs text-[#607583]">{applicant.workerLocation}</p>
-                  ) : null}
+          {applicants.map(applicant => {
+            const locallyBooked = Boolean(applicant.requestId && locallyBookedRequestIds[applicant.requestId]);
+            const effectiveApplicant = locallyBooked
+              ? { ...applicant, reviewState: 'booked' as const }
+              : applicant;
+            const badge = reviewBadge(effectiveApplicant);
+            const canConfirm =
+              Boolean(applicant.requestId) &&
+              !hasBooked &&
+              data?.canConfirmBookings !== false &&
+              (applicant.reviewState === 'applied' || applicant.reviewState === 'invited_accepted');
+            const pendingKey = applicant.requestId ? `accept-${applicant.requestId}` : '';
+
+            return (
+              <li
+                key={applicant.requestId ?? applicant.invitation?.invitationId ?? applicant.workerId}
+                className={`rounded-xl border p-4 ${
+                  applicant.reviewState === 'invited_accepted'
+                    ? 'border-[#BFDCD5] bg-[#E6F6F2]'
+                    : applicant.reviewState === 'booked'
+                      ? 'border-[#BFDCD5] bg-white'
+                      : 'border-[#DDE7E8] bg-[#F7FAFA]'
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-[#13334F]">{applicant.workerName}</p>
+                    {applicant.workerRole ? (
+                      <p className="mt-0.5 text-sm text-[#607583]">{applicant.workerRole}</p>
+                    ) : null}
+                    {applicant.workerLocation ? (
+                      <p className="mt-0.5 text-xs text-[#607583]">{applicant.workerLocation}</p>
+                    ) : null}
+                  </div>
+                  <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
                 </div>
-                <StatusBadge variant={applicant.status === 'requested' ? 'pending' : 'covered'}>
-                  {formatApplicantStatus(applicant.status)}
-                </StatusBadge>
-              </div>
-              {formatSubmittedAt(applicant.submittedAt) ? (
-                <p className="mt-2 text-xs text-[#607583]">
-                  Submitted {formatSubmittedAt(applicant.submittedAt)}
-                </p>
-              ) : null}
-              {applicant.status === 'requested' ? (
-                <button
-                  type="button"
-                  disabled={hasAccepted || isPending(`accept-${applicant.requestId}`)}
-                  onClick={async () => {
-                    const r = await run(`accept-${applicant.requestId}`, () =>
-                      acceptProviderShiftApplicant(applicant.requestId),
-                    );
-                    if (r.ok) {
-                      toast.success(r.data.message);
-                      reload();
-                      onBookingCreated?.();
-                    } else {
-                      toast.error(r.error.message);
-                    }
-                  }}
-                  className="mt-3 w-full rounded-lg bg-[#53B59F] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isPending(`accept-${applicant.requestId}`)
-                    ? 'Accepting…'
-                    : hasAccepted
-                      ? 'Shift booked'
-                      : 'Accept & create booking'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="mt-3 w-full rounded-lg border border-[#DDE7E8] bg-white px-3 py-2 text-sm font-semibold text-[#607583] disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {applicant.status === 'accepted' ? 'Booked' : 'No action'}
-                </button>
-              )}
-            </li>
-          ))}
+
+                {applicant.invitation ? (
+                  <div className="mt-3 rounded-lg border border-[#DDE7E8] bg-white/80 px-3 py-2 text-xs leading-5 text-[#607583]">
+                    <p className="font-semibold text-[#13334F]">Provider invitation</p>
+                    <p>
+                      Sent {formatSubmittedAt(applicant.invitation.invitedAt) ?? 'earlier'}
+                      {invitationResolutionLine(applicant)}
+                    </p>
+                    {applicant.invitation.resolvedAt ? (
+                      <p>Resolved {formatSubmittedAt(applicant.invitation.resolvedAt) ?? 'when coverage was secured'}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {formatSubmittedAt(applicant.submittedAt) ? (
+                  <p className="mt-2 text-xs text-[#607583]">
+                    {applicant.invitation ? 'Booking request created' : 'Applied'} {formatSubmittedAt(applicant.submittedAt)}
+                  </p>
+                ) : null}
+
+                {canConfirm && applicant.requestId ? (
+                  <button
+                    type="button"
+                    disabled={isPending(pendingKey)}
+                    onClick={async () => {
+                      const requestId = applicant.requestId;
+                      if (!requestId) return;
+                      const r = await run(pendingKey, () => acceptProviderShiftApplicant(requestId));
+                      if (r.ok) {
+                        toast.success(r.data.message);
+                        if (supabaseMode) reload();
+                        else setLocallyBookedRequestIds(prev => ({ ...prev, [requestId]: true }));
+                        onBookingCreated?.();
+                      } else {
+                        toast.error(r.error.message);
+                      }
+                    }}
+                    className="mt-3 w-full rounded-lg bg-[#53B59F] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2F8E7A] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isPending(pendingKey)
+                      ? 'Confirming…'
+                      : applicant.reviewState === 'invited_accepted'
+                        ? 'Confirm worker & create booking'
+                        : 'Accept application & create booking'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="mt-3 w-full rounded-lg border border-[#DDE7E8] bg-white px-3 py-2 text-sm font-semibold text-[#607583] disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {effectiveApplicant.reviewState === 'booked'
+                      ? 'Coverage secured'
+                      : effectiveApplicant.reviewState === 'covered_elsewhere'
+                        ? 'Closed when shift was booked'
+                        : effectiveApplicant.reviewState === 'invited'
+                          ? 'Waiting for worker'
+                          : effectiveApplicant.reviewState === 'declined'
+                            ? 'No action'
+                            : hasBooked
+                              ? 'Shift booked'
+                              : 'No booking action'}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      {data?.message ? <p className="mt-4 text-xs leading-5 text-[#607583]">{data.message}</p> : null}
     </Section>
   );
 }
@@ -332,8 +394,7 @@ export default function ProviderShiftDetail() {
         <Section title="Assigned worker">
           {shift.lifecycleStatus === 'Booked' ? (
             <p className="text-sm text-[#607583]">
-              Coverage is assigned via the Applications section above. Worker profile links from
-              bookings are not wired yet.
+              Coverage is secured. Covre keeps invitation and application history as audit context while closing unresolved competing intent.
             </p>
           ) : shift.assignedWorkerId ? (
             <Link
@@ -345,8 +406,7 @@ export default function ProviderShiftDetail() {
             </Link>
           ) : (
             <p className="text-sm text-[#607583]">
-              No worker assigned yet. Review applications above, or use Find worker for simulated
-              recommendations.
+              No worker assigned yet. Review applications and accepted invitations above, or use Find worker for recommendations.
             </p>
           )}
         </Section>

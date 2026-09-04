@@ -114,6 +114,7 @@ function RouteAuthLoading() {
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const { isLoading, isAuthenticated, role, authError } = useAuth();
   const location = useLocation();
+  const adminPreview = new URLSearchParams(location.search).get('adminPreview') === '1';
 
   if (isLoading) {
     return <RouteAuthLoading />;
@@ -135,6 +136,13 @@ export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
 
   if (!role) {
     return <AuthRoleUnavailable message={authError} allowedRoles={allowedRoles} />;
+  }
+
+  // Super Admin UI preview only: allow an authenticated admin to render worker/provider
+  // surfaces without changing their session role. Data access still uses the admin session,
+  // so Supabase ownership/RLS remains intact. The outer preview disables interactions.
+  if (adminPreview && role === 'admin' && !allowedRoles.includes('admin')) {
+    return <Outlet />;
   }
 
   if (!allowedRoles.includes(role)) {

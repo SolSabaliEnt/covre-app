@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Covre</title>
+    <script>
+      (function () {
+        var key = 'covre:spa-redirect';
+        var target = window.location.pathname + window.location.search + window.location.hash;
+
+        // Only preserve same-origin application paths. This page must never become an open redirect.
+        if (!target || target.charAt(0) !== '/' || target.indexOf('//') === 0) {
+          window.location.replace('/');
+          return;
+        }
+
+        try {
+          window.sessionStorage.setItem(key, target);
+          window.location.replace('/');
+          return;
+        } catch (error) {
+          // Some privacy modes can disable sessionStorage. Keep a same-origin query fallback so the
+          // root document can restore the original React Router path before the app boots.
+          window.location.replace('/?__covre_spa_redirect=' + encodeURIComponent(target));
+        }
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

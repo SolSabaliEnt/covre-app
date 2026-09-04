@@ -12,6 +12,24 @@ export type { ApiResult, ApiError, ApiListResult, ApiStatus } from '../api/types
 
 export * from './types';
 export * from './workerService';
+export * from './workerContinuityPreferenceService';
+export * from './continuityService';
+export * from './continuityTelemetryService';
 export * from './providerService';
+export * from './providerWorkerProfileService';
+export * from './providerWorkerRelationshipService';
+export * from './providerShiftInvitationService';
+export * from './providerApplicantReviewService';
+export * from './providerApplicantReviewTypes';
+export {
+  bookWorkerForShift,
+  inviteWorkerToShift,
+} from './providerLegacyActionGuards';
+export {
+  saveWorkerToProviderBench as addWorkerToBench,
+  saveWorkerDoNotSend as markWorkerDoNotSend,
+} from './providerWorkerRelationshipService';
 export * from './adminService';
+export * from './adminContinuityService';
+export * from './adminContinuityReadinessService';
 export * from './referralService';

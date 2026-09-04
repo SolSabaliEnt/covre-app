@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react"
-import type { AuthStateChangeEvent } from "@supabase/supabase-js"
+import type { AuthChangeEvent } from "@supabase/supabase-js"
 import { getBackendMode } from "../lib/backendMode"
 import { getSupabaseClient } from "../lib/supabaseClient"
 import { mockAuthStore } from "./mockAuthAdapter"
@@ -28,7 +28,7 @@ type AuthContextValue = AuthSession & {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 /** Supabase auth events that should re-resolve app session (skip TOKEN_REFRESHED). */
-function shouldReloadOnAuthEvent(event: AuthStateChangeEvent): boolean {
+function shouldReloadOnAuthEvent(event: AuthChangeEvent): boolean {
   return (
     event === "INITIAL_SESSION" ||
     event === "SIGNED_IN" ||
@@ -58,120 +58,78 @@ export function mergeSupabaseAuthSession(prev: AuthSession, next: AuthSession): 
       providerId: next.providerId ?? prev.providerId,
       workerId: next.workerId ?? prev.workerId,
       isLoading: false,
-      authError:
-        next.authError ??
-        "Unable to verify your workspace role. Your last known access is preserved.",
+      authError: next.authError,
     }
   }
 
   return { ...next, isLoading: false }
 }
 
-function MockAuthProvider({ children }: { children: ReactNode }) {
-  const session = useSyncExternalStore(
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const backendMode = getBackendMode()
+  const mockSession = useSyncExternalStore(
     mockAuthStore.subscribe,
     mockAuthStore.getSnapshot,
-    mockAuthStore.getServerSnapshot,
+    mockAuthStore.getSnapshot,
   )
-
-  const loginAs = useCallback((role: Role) => {
-    mockAuthStore.loginAs(role)
-  }, [])
-
-  const logout = useCallback(() => {
-    mockAuthStore.logout()
-  }, [])
-
-  const switchRole = useCallback((role: Role) => {
-    mockAuthStore.switchRole(role)
-  }, [])
-
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      ...session,
-      isLoading: false,
-      loginAs,
-      logout,
-      switchRole,
-    }),
-    [session, loginAs, logout, switchRole],
-  )
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-function SupabaseAuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<AuthSession>({
-    isAuthenticated: false,
+  const [supabaseSession, setSupabaseSession] = useState<AuthSession>({
     name: "",
-    isLoading: true,
+    isAuthenticated: false,
+    isLoading: backendMode === "supabase",
   })
 
+  const reloadSupabaseSession = useCallback(async () => {
+    const next = await supabaseAuthAdapter.getSession()
+    setSupabaseSession(prev => mergeSupabaseAuthSession(prev, next))
+  }, [])
+
   useEffect(() => {
-    let cancelled = false
+    if (backendMode !== "supabase") return
 
-    const loadSupabaseSession = async () => {
-      setSession(prev => ({ ...prev, isLoading: true }))
-      try {
-        const next = await supabaseAuthAdapter.getSession()
-        if (!cancelled) {
-          setSession(prev => mergeSupabaseAuthSession(prev, next))
-        }
-      } catch {
-        if (!cancelled) {
-          setSession(prev =>
-            prev.isAuthenticated && prev.role
-              ? {
-                  ...prev,
-                  isLoading: false,
-                  authError:
-                    "We couldn't refresh your session. Your last known access is preserved.",
-                }
-              : {
-                  isAuthenticated: false,
-                  name: "",
-                  isLoading: false,
-                  authError: "We couldn't refresh your session. Please sign in again.",
-                },
-          )
-        }
-      }
-    }
+    let active = true
+    void supabaseAuthAdapter.getSession().then(next => {
+      if (!active) return
+      setSupabaseSession(prev => mergeSupabaseAuthSession(prev, next))
+    })
 
-    void loadSupabaseSession()
-
-    const supabase = getSupabaseClient()
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (!shouldReloadOnAuthEvent(event)) {
-        return
-      }
-      void loadSupabaseSession()
+    } = getSupabaseClient().auth.onAuthStateChange(event => {
+      if (!active || !shouldReloadOnAuthEvent(event)) return
+      void reloadSupabaseSession()
     })
 
     return () => {
-      cancelled = true
+      active = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [backendMode, reloadSupabaseSession])
 
-  const loginAs = useCallback((role: Role) => {
-    supabaseAuthAdapter.loginAs(role)
-  }, [])
+  const loginAs = useCallback(
+    (role: Role) => {
+      if (backendMode === "mock") mockAuthStore.loginAs(role)
+    },
+    [backendMode],
+  )
 
   const logout = useCallback(() => {
-    void (async () => {
-      await supabaseAuthAdapter.logout()
-      const next = await supabaseAuthAdapter.getSession()
-      setSession({ ...next, isLoading: false })
-    })()
-  }, [])
+    if (backendMode === "mock") {
+      mockAuthStore.logout()
+      return
+    }
+    void Promise.resolve(supabaseAuthAdapter.logout()).then(() => {
+      setSupabaseSession({ name: "", isAuthenticated: false, isLoading: false })
+    })
+  }, [backendMode])
 
-  const switchRole = useCallback((role: Role) => {
-    supabaseAuthAdapter.switchRole(role)
-  }, [])
+  const switchRole = useCallback(
+    (role: Role) => {
+      if (backendMode === "mock") mockAuthStore.switchRole(role)
+    },
+    [backendMode],
+  )
 
+  const session = backendMode === "supabase" ? supabaseSession : mockSession
   const value = useMemo<AuthContextValue>(
     () => ({
       ...session,
@@ -180,24 +138,14 @@ function SupabaseAuthProvider({ children }: { children: ReactNode }) {
       logout,
       switchRole,
     }),
-    [session, loginAs, logout, switchRole],
+    [loginAs, logout, session, switchRole],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const mode = useMemo(() => getBackendMode(), [])
-  if (mode === "mock") {
-    return <MockAuthProvider>{children}</MockAuthProvider>
-  }
-  return <SupabaseAuthProvider>{children}</SupabaseAuthProvider>
-}
-
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider")
-  }
-  return ctx
+  const context = useContext(AuthContext)
+  if (!context) throw new Error("useAuth must be used within AuthProvider")
+  return context
 }

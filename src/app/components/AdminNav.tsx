@@ -12,10 +12,12 @@ import {
   Gift,
   LifeBuoy,
   Users,
+  ListTree,
+  Repeat2,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { APP_NAME, LANDING_LOGO_SIDEBAR_CLASS, LANDING_LOGO_SRC } from '../lib/brand';
-import { ADMIN_ENTRY_PATH, AUTH_COMPAT_PATH } from '../lib/entryRoutes';
+import { ADMIN_ENTRY_PATH } from '../lib/entryRoutes';
 
 type NavItem = {
   to: string;
@@ -34,6 +36,18 @@ const navItems: NavItem[] = [
     label: 'Dashboard',
     icon: LayoutDashboard,
     isActive: p => p === '/admin',
+  },
+  {
+    to: '/admin/ops',
+    label: 'Operations',
+    icon: Repeat2,
+    isActive: p => p.startsWith('/admin/ops'),
+  },
+  {
+    to: '/admin/full-app',
+    label: 'Full App',
+    icon: ListTree,
+    isActive: p => p.startsWith('/admin/full-app'),
   },
   {
     to: '/admin/credentials',
@@ -98,7 +112,6 @@ export function AdminNav() {
 
   return (
     <div className="flex min-h-screen w-64 shrink-0 flex-col bg-[#0B243A] text-white">
-      {/* Logo — dark-background wordmark + admin sublabel */}
       <div className="border-b border-[#244965] p-6">
         <Link to="/" className="block space-y-2">
           <img
@@ -114,7 +127,6 @@ export function AdminNav() {
         </Link>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-4">
         <div className="space-y-1">
           {navItems.map(item => {

@@ -340,7 +340,7 @@ export async function generateProviderInvoiceFromApprovedTimesheetsInSupabase():
     }
 
     const forbidden = assertCanGenerateInvoices(membershipResult.data)
-    if (forbidden) return forbidden
+    if (forbidden && !forbidden.ok) return forbidden
 
     const supabase = getSupabaseClient()
     const providerId = membershipResult.data.providerId

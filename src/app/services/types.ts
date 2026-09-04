@@ -235,6 +235,7 @@ export type WorkerShiftRequestSummary = {
 export type WorkerActionStatus =
   | 'claimed'
   | 'saved'
+  | 'site_return_preference_saved'
   | 'question_sent'
   | 'calendar_added'
   | 'clocked_in'

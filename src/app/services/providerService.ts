@@ -689,7 +689,7 @@ export async function listProviderShiftApplicants(
 
 export async function acceptProviderShiftApplicant(
   requestId: string,
-): Promise<ApiResult<ProviderBookingAcceptResult>> {
+): Promise<ApiResult<import('./types').ProviderBookingAcceptResult>> {
   if (getBackendMode() === 'supabase') {
     return acceptProviderShiftApplicantInSupabase(requestId);
   }
