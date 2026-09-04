@@ -121,7 +121,7 @@ export function ProviderShiftInviteControl({
 
           setInvitedShiftId(selectedShiftId);
           toast.success('Shift invitation sent');
-          trackContinuityEvent('provider_rebook_action', {
+          trackContinuityEvent('provider_return_intent', {
             actor: 'provider',
             workerId,
             shiftId: selectedShiftId,
