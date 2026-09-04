@@ -5,6 +5,10 @@ import type {
   ProviderShiftApplicantStatus,
   ProviderShiftApplicantsResult,
 } from "../services/types"
+import type {
+  ProviderShiftApplicantReview,
+  ProviderShiftApplicantReviewResult,
+} from "../services/providerApplicantReviewTypes"
 
 type ProviderMembership = { providerId: string }
 
@@ -22,6 +26,22 @@ type ShiftRequestRow = {
   } | null
 }
 
+type InvitationRow = {
+  id: string
+  shift_id: string
+  worker_id: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+type WorkerProfileRow = {
+  id: string
+  headline: string | null
+  city: string | null
+  state: string | null
+}
+
 function fail<T = never>(code: string, message: string): ApiResult<T> {
   return { ok: false, error: { code, message } }
 }
@@ -32,8 +52,11 @@ function ok<T>(data: T): ApiResult<T> {
 
 function friendlyDbMessage(err: { message?: string; code?: string }, fallback: string): string {
   const raw = err.message ?? fallback
+  if (/provider_shift_invitations|relation .* does not exist/i.test(raw)) {
+    return "Invitation-aware applicant review requires the Covre provider shift invitation migration."
+  }
   if (/row-level security|RLS|permission denied|42501/i.test(raw)) {
-    return "Loading applicants is blocked by database permissions (RLS). Apply provider applicant review policies (0009) on your Supabase project."
+    return "Loading applicants is blocked by database permissions (RLS). Apply provider applicant review policies on your Supabase project."
   }
   return raw
 }
@@ -108,6 +131,29 @@ function rowToApplicant(row: ShiftRequestRow): ProviderShiftApplicant {
   }
 }
 
+async function verifyShiftOwnership(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  providerId: string,
+  shiftId: string,
+): Promise<ApiResult<true>> {
+  const { data: shift, error: shiftErr } = await supabase
+    .from("shifts")
+    .select("id, provider_id")
+    .eq("id", shiftId)
+    .eq("provider_id", providerId)
+    .maybeSingle()
+
+  if (shiftErr) {
+    return fail("shift_load", friendlyDbMessage(shiftErr, "Unable to verify shift."))
+  }
+
+  if (!shift) {
+    return fail("shift_not_found", "Shift not found for your organization.")
+  }
+
+  return ok(true)
+}
+
 export async function listProviderShiftApplicantsFromSupabase(
   shiftId: string,
 ): Promise<ApiResult<ProviderShiftApplicantsResult>> {
@@ -123,22 +169,8 @@ export async function listProviderShiftApplicantsFromSupabase(
       )
     }
 
-    const { providerId } = membershipRes.data
-
-    const { data: shift, error: shiftErr } = await supabase
-      .from("shifts")
-      .select("id, provider_id")
-      .eq("id", shiftId)
-      .eq("provider_id", providerId)
-      .maybeSingle()
-
-    if (shiftErr) {
-      return fail("shift_load", friendlyDbMessage(shiftErr, "Unable to verify shift."))
-    }
-
-    if (!shift) {
-      return fail("shift_not_found", "Shift not found for your organization.")
-    }
+    const ownership = await verifyShiftOwnership(supabase, membershipRes.data.providerId, shiftId)
+    if (!ownership.ok) return ownership
 
     const { data: rows, error: reqErr } = await supabase
       .from("shift_requests")
@@ -175,7 +207,167 @@ export async function listProviderShiftApplicantsFromSupabase(
       isReadOnly: true,
       message:
         applicants.length > 0
-          ? "Applicant review is connected. Booking acceptance comes next."
+          ? "Applicant review is connected."
+          : undefined,
+    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Request failed."
+    return fail("unexpected", message)
+  }
+}
+
+/**
+ * Canonical provider review feed for one shift. Invitation state is overlaid on the normal
+ * shift_request lifecycle; accepted invitations are still confirmed through the existing booking
+ * transaction rather than a parallel invitation-booking path.
+ */
+export async function listProviderShiftApplicantReviewFromSupabase(
+  shiftId: string,
+): Promise<ApiResult<ProviderShiftApplicantReviewResult>> {
+  try {
+    const supabase = getSupabaseClient()
+    const membershipRes = await loadProviderMembership(supabase)
+    if (!membershipRes.ok) return membershipRes
+    if (!membershipRes.data) {
+      return fail(
+        "provider_membership_required",
+        "Complete provider onboarding before viewing applicants.",
+      )
+    }
+
+    const { providerId } = membershipRes.data
+    const ownership = await verifyShiftOwnership(supabase, providerId, shiftId)
+    if (!ownership.ok) return ownership
+
+    const [requestRes, invitationRes] = await Promise.all([
+      supabase
+        .from("shift_requests")
+        .select(
+          `
+          id,
+          shift_id,
+          worker_id,
+          status,
+          created_at,
+          worker_profiles (
+            id,
+            headline,
+            city,
+            state
+          )
+        `,
+        )
+        .eq("shift_id", shiftId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("provider_shift_invitations")
+        .select("id, shift_id, worker_id, status, created_at, updated_at")
+        .eq("provider_id", providerId)
+        .eq("shift_id", shiftId)
+        .order("created_at", { ascending: false }),
+    ])
+
+    if (requestRes.error) {
+      return fail(
+        "shift_requests_load",
+        friendlyDbMessage(requestRes.error, "Unable to load applications."),
+      )
+    }
+    if (invitationRes.error) {
+      return fail(
+        "shift_invitations_load",
+        friendlyDbMessage(invitationRes.error, "Unable to load shift invitations."),
+      )
+    }
+
+    const requestRows = (requestRes.data ?? []) as ShiftRequestRow[]
+    const invitationRows = (invitationRes.data ?? []) as InvitationRow[]
+    const requestByWorker = new Map(requestRows.map(row => [row.worker_id, row]))
+    const invitationByWorker = new Map(invitationRows.map(row => [row.worker_id, row]))
+    const workerIds = [...new Set([...requestByWorker.keys(), ...invitationByWorker.keys()])]
+
+    let profileByWorker = new Map<string, WorkerProfileRow>()
+    const requestProfiles = requestRows
+      .map(row => row.worker_profiles)
+      .filter((row): row is WorkerProfileRow => Boolean(row?.id))
+    profileByWorker = new Map(requestProfiles.map(row => [row.id, row]))
+
+    const missingWorkerIds = workerIds.filter(workerId => !profileByWorker.has(workerId))
+    if (missingWorkerIds.length > 0) {
+      const { data: profileRows, error: profileErr } = await supabase
+        .from("worker_profiles")
+        .select("id, headline, city, state")
+        .in("id", missingWorkerIds)
+
+      if (profileErr) {
+        return fail(
+          "worker_profiles_load",
+          friendlyDbMessage(profileErr, "Unable to load invited worker profiles."),
+        )
+      }
+
+      for (const row of (profileRows ?? []) as WorkerProfileRow[]) {
+        profileByWorker.set(row.id, row)
+      }
+    }
+
+    const applicants: ProviderShiftApplicantReview[] = workerIds.map(workerId => {
+      const request = requestByWorker.get(workerId)
+      const invitation = invitationByWorker.get(workerId)
+      const profile = profileByWorker.get(workerId)
+      const requestStatus = request ? mapApplicantStatus(request.status) : undefined
+
+      let reviewState: ProviderShiftApplicantReview["reviewState"] = "applied"
+      if (requestStatus === "accepted") reviewState = "booked"
+      else if (requestStatus === "withdrawn") reviewState = "withdrawn"
+      else if (requestStatus === "rejected") reviewState = "declined"
+      else if (invitation?.status === "accepted") reviewState = "invited_accepted"
+      else if (invitation && (invitation.status === "pending" || invitation.status === "viewed")) reviewState = "invited"
+      else if (invitation?.status === "declined") reviewState = "declined"
+
+      return {
+        requestId: request?.id,
+        shiftId,
+        workerId,
+        workerName: profile?.headline?.trim() || "Care worker",
+        workerRole: profile?.headline?.trim() || undefined,
+        workerLocation: formatLocation(profile?.city, profile?.state),
+        requestStatus,
+        submittedAt: request?.created_at,
+        invitation: invitation
+          ? {
+              invitationId: invitation.id,
+              status: invitation.status as ProviderShiftApplicantReview["invitation"] extends infer T
+                ? T extends { status: infer S }
+                  ? S
+                  : never
+                : never,
+              invitedAt: invitation.created_at,
+              updatedAt: invitation.updated_at,
+            }
+          : undefined,
+        reviewState,
+        isSupabaseBacked: true,
+      }
+    })
+
+    const stateWeight: Record<ProviderShiftApplicantReview["reviewState"], number> = {
+      invited_accepted: 0,
+      applied: 1,
+      invited: 2,
+      booked: 3,
+      withdrawn: 4,
+      declined: 5,
+    }
+    applicants.sort((a, b) => stateWeight[a.reviewState] - stateWeight[b.reviewState])
+
+    return ok({
+      shiftId,
+      applicants,
+      canConfirmBookings: true,
+      message:
+        applicants.length > 0
+          ? "Invitations and applications are shown together. Worker acceptance still requires provider booking confirmation."
           : undefined,
     })
   } catch (e) {
