@@ -9,6 +9,7 @@ import type {
   ProviderShiftApplicantReview,
   ProviderShiftApplicantReviewResult,
 } from "../services/providerApplicantReviewTypes"
+import type { ProviderShiftInvitationStatus } from "./providerShiftInvitationsRepository"
 
 type ProviderMembership = { providerId: string }
 
@@ -337,11 +338,7 @@ export async function listProviderShiftApplicantReviewFromSupabase(
         invitation: invitation
           ? {
               invitationId: invitation.id,
-              status: invitation.status as ProviderShiftApplicantReview["invitation"] extends infer T
-                ? T extends { status: infer S }
-                  ? S
-                  : never
-                : never,
+              status: invitation.status as ProviderShiftInvitationStatus,
               invitedAt: invitation.created_at,
               updatedAt: invitation.updated_at,
             }
