@@ -1,13 +1,35 @@
 import type { ApiResult } from '../api/types';
 import { mockRequest } from '../api/mockApi';
+import { shifts } from '../data/selectors';
 import { getBackendMode } from '../lib/backendMode';
 import {
   createProviderShiftInvitationInSupabase,
   listCurrentWorkerShiftInvitationsFromSupabase,
+  listProviderInvitableShiftsFromSupabase,
+  type ProviderInvitableShift,
   type ProviderShiftInvitation,
 } from '../repositories/providerShiftInvitationsRepository';
 
 const mockInvitations: ProviderShiftInvitation[] = [];
+
+export async function listProviderInvitableShifts(): Promise<ApiResult<ProviderInvitableShift[]>> {
+  if (getBackendMode() === 'supabase') {
+    return listProviderInvitableShiftsFromSupabase();
+  }
+
+  return mockRequest(() =>
+    shifts
+      .filter(shift => shift.providerOrgId === 'prov-001' && shift.lifecycleStatus === 'Open')
+      .map(shift => ({
+        id: shift.id,
+        title: shift.roleTitle,
+        role: shift.workRole,
+        siteName: shift.siteName,
+        startsAt: shift.dateLabel,
+        endsAt: shift.timeRange,
+      })),
+  );
+}
 
 export async function inviteWorkerToOpenShift(
   workerId: string,
